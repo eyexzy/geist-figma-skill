@@ -158,7 +158,7 @@ The skill is provided "AS IS", without warranty of any kind. It does not guarant
 <sub>Made by <a href="https://www.linkedin.com/in/oleksii-molchanov-ux-ui-design">Oleksii Molchanov</a></sub>
 </div>
 
-[figma-library]: <figma-library-url>
+[figma-library]: https://www.figma.com/community/file/1693390940030302845
 [geist]: https://vercel.com/geist
 [figma-mcp]: https://github.com/figma/mcp-server-guide
 [agent-skills]: https://agentskills.io
