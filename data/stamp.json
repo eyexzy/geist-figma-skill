@@ -1,0 +1,169 @@
+{
+ "fileKey": "FV7WoolwA4hN58QpnEPfVZ",
+ "takenOn": "2026-10-17",
+ "counts": {
+  "variables": 599,
+  "collections": 19,
+  "textStyles": 30,
+  "effectStyles": 32,
+  "paintStyles": 3,
+  "gridStyles": 5,
+  "pages": 65,
+  "componentPages": 61,
+  "componentSets": 124,
+  "variants": 1962,
+  "icons": 486
+ },
+ "hash": {
+  "variables": "55907bb5",
+  "styles": "2faa77bb",
+  "pages": "61edffc9",
+  "styleKeys": "49325433",
+  "sets": "62a9cd31",
+  "setKeys": "5b08bc2e",
+  "iconKeys": "5517e810",
+  "docs": "91ec9d05"
+ },
+ "docsByPage": {
+  "Avatar": "8cabcd17",
+  "Badge": "03443ad9",
+  "Banner": "c3566c86",
+  "Book": "bebcbd48",
+  "Breadcrumbs": "7c42fbd3",
+  "Browser": "031e1d65",
+  "Button": "fde7308a",
+  "Calendar": "80a8bcf0",
+  "Checkbox": "c0fdcddb",
+  "Choicebox": "97fe5908",
+  "Code Block": "17671b80",
+  "Collapse": "60f0ed0a",
+  "Combobox": "ec567e4d",
+  "Command Menu": "850e861c",
+  "Context Card": "082b5cf1",
+  "Copy Button": "85cbc8ab",
+  "Description": "f68727fd",
+  "Destructive Action Modal": "921b08e1",
+  "Dots Menu": "feab20fa",
+  "Drawer": "92ace034",
+  "Empty State": "67b3a901",
+  "Error": "016efd22",
+  "Error Card": "d6cd64d1",
+  "Feedback": "98d17700",
+  "Fieldset": "0cd3b033",
+  "File Tree": "eaef373e",
+  "Gauge": "20f8f53e",
+  "Input": "5cf0c9cc",
+  "Keyboard Input": "ac2a2968",
+  "Label": "0f15ca17",
+  "Load More Button": "11393b65",
+  "Loading Dots": "0b429c92",
+  "Menu": "83c17d28",
+  "Modal": "87ce59f2",
+  "Multi Select": "41b3b2ef",
+  "Note": "c7f0c70a",
+  "Pagination": "ee0c447e",
+  "Progress": "822ece70",
+  "Project Banner": "a077eadd",
+  "Radio": "52dc73f3",
+  "Relative Time Card": "8d92c951",
+  "Select": "0ef99bbb",
+  "Separator": "01954e38",
+  "Sheet": "0b411548",
+  "Show More": "38994dd5",
+  "Skeleton": "12cf50ae",
+  "Slider": "733b6249",
+  "Snippet": "c0992ed0",
+  "Spinner": "780bbe1d",
+  "Split Button": "30d8596f",
+  "Status Dot": "306c3c67",
+  "Switch": "3091d202",
+  "Table": "aa4f2e97",
+  "Tabs": "cc29e03f",
+  "Textarea": "ed53f834",
+  "Theme Switcher": "3203b9fa",
+  "Toast": "0e53399e",
+  "Toggle": "e0208003",
+  "Tooltip": "828a4218",
+  "Video": "8ba5fd93"
+ },
+ "consumer": {
+  "collections": {
+   "DS / Core Colors": {
+    "count": 211,
+    "hash": "bc38874d"
+   },
+   "Prototyping / Multi Select": {
+    "count": 14,
+    "hash": "fe9cfb44"
+   },
+   "Prototyping / Split Button": {
+    "count": 1,
+    "hash": "3e3aa4c9"
+   },
+   "Prototyping / Code Block": {
+    "count": 1,
+    "hash": "6fd2f324"
+   },
+   "DS / Core Numbers": {
+    "count": 79,
+    "hash": "9787c43e"
+   },
+   "Prototyping / Toasts": {
+    "count": 15,
+    "hash": "33d2aa03"
+   },
+   "Prototyping / File Tree": {
+    "count": 5,
+    "hash": "1450b6b9"
+   },
+   "Prototyping / Feedback": {
+    "count": 9,
+    "hash": "1dff2269"
+   },
+   "Prototyping / Drawer": {
+    "count": 1,
+    "hash": "56ea25df"
+   },
+   "Prototyping / Command Menu": {
+    "count": 2,
+    "hash": "fac7e2a2"
+   },
+   "Prototyping / Sheet": {
+    "count": 1,
+    "hash": "c2565533"
+   },
+   "Prototyping / Dots Menu": {
+    "count": 1,
+    "hash": "3e3aa4c9"
+   },
+   "Prototyping / Combobox": {
+    "count": 25,
+    "hash": "a3013c2c"
+   },
+   "Prototyping / Modal": {
+    "count": 1,
+    "hash": "79eac639"
+   },
+   "Prototyping / Calendar": {
+    "count": 2,
+    "hash": "7c58b8c7"
+   },
+   "Snippet / Theme": {
+    "count": 3,
+    "hash": "51de8522"
+   },
+   "Prototyping / Examples": {
+    "count": 221,
+    "hash": "8ba01c01"
+   },
+   "File Tree / Card": {
+    "count": 1,
+    "hash": "6af00377"
+   },
+   "Table / Body": {
+    "count": 4,
+    "hash": "bccb4996"
+   }
+  }
+ }
+}
