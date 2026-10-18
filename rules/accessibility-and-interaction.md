@@ -27,7 +27,7 @@ Source: Vercel's Web Interface Guidelines (MIT, Vercel Labs) and the Geist compo
 ## Color and contrast
 
 - Never carry meaning by color alone: add text, an icon or a shape (a Badge with its state word, a Status Dot with its label).
-- Prefer APCA over WCAG 2 for judging contrast. Check hover and focus colors too, in Light and Dark.
+- Prefer APCA over WCAG 2 for judging contrast. Check hover and focus colors too, in Light and Dark. The audit computes WCAG 2 ratios only, so judge APCA yourself.
 
 ## Forms
 

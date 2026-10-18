@@ -12,6 +12,8 @@ const RING = 4;
 const DEFAULT_TEXT = /^(Label|Value|Text|Title|Heading|Description|Placeholder|Item \d+|Lorem ipsum.*|Button|Name)$/;
 const DEFAULT_NAME = /^(Frame|Rectangle|Group|Ellipse|Line|Vector|Text|Section|Polygon|Star) ?\d*$/;
 const APPEARANCE = new Set(['fills', 'strokes', 'effects', 'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'strokeWeight', 'fillStyleId', 'strokeStyleId', 'effectStyleId', 'textStyleId', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing']);
+// Sets whose property active, open or show opens an overlay over the screen (the same property selects a tab in Tabs and Switch).
+const OVERLAY_SETS = new Set(['Modal', 'Command Menu', 'Sheet', 'Drawer']);
 // Names of the library's public component sets.
 const libNames = new Set(['Avatar', 'Avatar Group', 'Badge', 'Banner', 'Book', 'Breadcrumb', 'Browser', 'Button', 'Calendar', 'Calendar with Presets', 'Checkbox', 'Choicebox Group', 'Code Block', 'Collapse', 'Collapse Group', 'Combobox', 'Command Menu', 'Context Card', 'Copy Button', 'Description', 'Dots Menu', 'Drawer', 'Empty State', 'Error', 'Error Card', 'Feedback', 'Feedback Inline', 'Fieldset', 'Gauge', 'Input', 'Kbd', 'Kbd Group', 'Label', 'Load More Button', 'Loading Dots', 'Menu', 'Modal', 'Multi Select', 'Note', 'Pagination', 'Pill', 'Progress', 'Project Banner', 'Radio', 'Radio Group', 'Relative Time Card', 'Secret Value', 'Select', 'Separator', 'Sheet', 'Show More', 'Skeleton', 'Slider', 'Snippet', 'Spinner', 'Split Button', 'Status Dot', 'Switch', 'Table', 'Tabs', 'Textarea', 'Theme Switcher', 'Toast', 'Toasts', 'Toggle', 'Tooltip', 'Tree', 'Video']);
 
@@ -26,14 +28,26 @@ const flag = (id, sev, what, n, extra) => {
 };
 const vcache = new Map();
 const getV = async id => { if (!vcache.has(id)) vcache.set(id, await figma.variables.getVariableByIdAsync(id)); return vcache.get(id); };
+// A variable drives an overlay when it is yours or a Prototyping / library variable; a mode variable of a component (Table / Body: table/bordered) only switches a look.
+const driverCache = new Map();
+const isDriver = async id => {
+  if (driverCache.has(id)) return driverCache.get(id);
+  const v = await getV(id);
+  let r = !!v;
+  if (v && v.remote) { const c = await figma.variables.getVariableCollectionByIdAsync(v.variableCollectionId); r = !!c && /^Prototyping \//.test(c.name); }
+  driverCache.set(id, r);
+  return r;
+};
+const inFlow = n => !!(n.parent && n.parent.layoutMode && n.parent.layoutMode !== 'NONE' && n.layoutPositioning !== 'ABSOLUTE');
+const setNameOf = async inst => { const m = await inst.getMainComponentAsync(); return m ? (m.parent && m.parent.type === 'COMPONENT_SET' ? m.parent.name : m.name) : ''; };
 const hex = c => '#' + [c.r, c.g, c.b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
 const frac = v => Math.abs(v - Math.round(v)) > 0.01;
 const bound = (n, f) => n.boundVariables && n.boundVariables[f];
 const visiblePaint = p => p.visible !== false && (p.opacity === undefined || p.opacity > 0);
 const hasFill = n => Array.isArray(n.fills) && n.fills.some(visiblePaint);
 const opaque = p => p.visible !== false && (p.opacity === undefined || p.opacity === 1);
-const hasAnyFill = n => Array.isArray(n.fills) && n.fills.some(f => f.visible !== false);
-const rxActions = r => r.actions || (r.action ? [r.action] : []);
+// The actions of a reaction, with the branches of a condition (If / Else) unfolded.
+const rxActions = r => { const list = []; const add = x => { if (!x) return; if (x.type === 'CONDITIONAL') for (const bl of x.conditionalBlocks || []) (bl.actions || []).forEach(add); else list.push(x); }; (r.actions || (r.action ? [r.action] : [])).forEach(add); return list; };
 const inter = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
 const draws = n => n.visible !== false && (n.type === 'TEXT' || hasFill(n) || (Array.isArray(n.strokes) && n.strokes.some(visiblePaint)) || ('children' in n && n.children.some(draws)));
 
@@ -65,7 +79,7 @@ for (const { n, own, inside, ancVis } of all) {
   const b = n.absoluteBoundingBox;
 
   // Geometry
-  if ((vis || (ancVis && b && Math.min(b.width, b.height) >= 100)) && b && ['FRAME', 'INSTANCE', 'RECTANGLE', 'LINE', 'COMPONENT'].includes(n.type) && (n.type === 'LINE' || Math.min(b.width, b.height) >= 6)) {
+  if (!inside && (vis || (ancVis && b && Math.min(b.width, b.height) >= 100)) && b && ['FRAME', 'INSTANCE', 'RECTANGLE', 'LINE', 'COMPONENT'].includes(n.type) && (n.type === 'LINE' || Math.min(b.width, b.height) >= 6)) {
     const p = n.parent && n.parent.absoluteBoundingBox;
     const originFrac = (frac(b.x) || frac(b.y)) && !(p && (frac(p.x) || frac(p.y)));
     const sizeFrac = (frac(b.width) || frac(b.height)) && !(p && (frac(p.width) || frac(p.height)));
@@ -97,15 +111,22 @@ for (const { n, own, inside, ancVis } of all) {
     }
     if (mc && n.reactions.length && vis) {
       const hov = r => r.trigger && (r.trigger.type === 'ON_HOVER' || r.trigger.type === 'MOUSE_ENTER');
-      if (mc.reactions.some(hov) && !n.reactions.some(hov)) flag('hover-lost', 'error', 'reactions set on the instance replaced the hover of its component', n);
+      if (mc.reactions.some(hov) && !n.reactions.some(hov)) {
+        let holds = false;
+        for (const x of n.findAll(y => y.boundVariables && y.boundVariables.visible && (y.type === 'INSTANCE' || y.type === 'FRAME'))) if (await isDriver(x.boundVariables.visible.id)) { holds = true; break; }
+        if (!holds) flag('hover-lost', 'error', 'reactions set on the instance replaced the hover of its component', n);
+      }
     }
     const ps = n.componentProperties || {};
+    const overlaySet = OVERLAY_SETS.has(await setNameOf(n));
     for (const [k, v] of Object.entries(ps)) {
-      if (!/^(active|open|show|visible)(#|$)/.test(k) || !(v.boundVariables && v.boundVariables.value)) continue;
-      const later = n.parent ? n.parent.children.slice(n.parent.children.indexOf(n) + 1) : [];
-      const last = later.every(s => s.layoutPositioning === 'ABSOLUTE');
+      if (!overlaySet || !/^(active|open|show|visible)(#|$)/.test(k) || !(v.boundVariables && v.boundVariables.value)) continue;
+      const sibs = n.parent ? n.parent.children : [];
+      const at = sibs.indexOf(n);
+      const above = n.parent && n.parent.itemReverseZIndex ? sibs.slice(0, at) : sibs.slice(at + 1);
+      const last = above.every(s => s.layoutPositioning === 'ABSOLUTE');
       const auto = n.parent && n.parent.layoutMode && n.parent.layoutMode !== 'NONE';
-      if (!last || (auto && n.layoutPositioning !== 'ABSOLUTE')) flag('overlay-placement', 'warn', 'an overlay should be the last child of its parent and absolute in an auto layout, or it is covered or pushes the layout', n);
+      if (!last || (auto && n.layoutPositioning !== 'ABSOLUTE')) flag('overlay-placement', 'warn', 'an overlay should be drawn above its siblings (the last child, or the first one when the parent has First on top) and absolute in an auto layout, or it is covered or pushes the layout', n);
     }
   }
   if (n.type === 'FRAME' || n.type === 'COMPONENT') {
@@ -128,7 +149,7 @@ for (const { n, own, inside, ancVis } of all) {
   }
   if (n.type !== 'TEXT' && 'fills' in n && !n.fillStyleId && n.type !== 'INSTANCE') {
     for (const p of (Array.isArray(n.fills) ? n.fills : [])) {
-      if (p.visible === false || p.type !== 'SOLID') continue;
+      if (p.visible === false || p.type !== 'SOLID' || p.opacity === 0) continue;
       if (p.boundVariables && p.boundVariables.color) { colorVarIds.add(p.boundVariables.color.id); const v = await getV(p.boundVariables.color.id); if (v && /^(legacy|accents|components)\//.test(v.name)) flag('legacy-token', 'warn', 'a layer bound to a legacy or component-internal variable; use ds/* in new work', n, v.name); continue; }
       flag('unbound-fill', 'error', 'fill that is a hex value, not a variable or style', n, hex(p.color));
     }
@@ -140,7 +161,10 @@ for (const { n, own, inside, ancVis } of all) {
   if (n.type === 'TEXT') {
     counts.text++;
     const segs = n.getStyledTextSegments(['textStyleId', 'fontName', 'fills', 'fontSize', 'fontWeight']);
-    if (segs.some(s => !s.textStyleId)) flag('text-no-style', 'error', 'text without a library text style', n, n.characters.slice(0, 30));
+    if (segs.some(s => !s.textStyleId)) {
+      if (n.id.includes(';')) flag('text-no-style-in-instance', 'warn', 'text without a library text style inside a library instance: often the default text of the component or of its slot', n, n.characters.slice(0, 30));
+      else flag('text-no-style', 'error', 'text without a library text style', n, n.characters.slice(0, 30));
+    }
     for (const s of segs) if (!GEIST_FONTS.has(s.fontName.family)) { flag('font', 'error', 'font that is not Geist', n, s.fontName.family + ' ' + s.fontName.style); break; }
     if (n.hasMissingFont) flag('missing-font', 'error', 'text with a missing font', n);
     if (vis && n.width < 6 && n.characters.trim().length >= 3) flag('text-collapsed', 'error', 'text collapsed to a sliver (Fill container inside a Hug parent)', n, n.characters.slice(0, 24));
@@ -172,6 +196,7 @@ for (const { n, own, inside, ancVis } of all) {
 // Overlays: layers shown by a variable and hidden now. Their open geometry is known while hidden.
 for (const { n, own, ancVis } of all) {
   if (n.visible !== false || !ancVis || !(n.boundVariables && n.boundVariables.visible) || !['INSTANCE', 'FRAME'].includes(n.type)) continue;
+  if (inFlow(n) || !(await isDriver(n.boundVariables.visible.id))) continue;
   const B = n.absoluteBoundingBox; if (!B) continue;
   const scr = screenOf(n), S = scr.absoluteBoundingBox;
   if (S && (B.x < S.x - 0.5 || B.y < S.y - 0.5 || B.x + B.width > S.x + S.width + 0.5 || B.y + B.height > S.y + S.height + 0.5)) flag('overlay-outside-screen', 'error', 'an overlay opens outside the screen frame (use the other side, or leave room)', n, 'by ' + Math.round(Math.max(S.y - B.y, B.y + B.height - S.y - S.height, S.x - B.x, B.x + B.width - S.x - S.width)) + 'px');
@@ -194,26 +219,34 @@ for (const { n, own, ancVis } of all) {
 // Prototype wiring
 const setTrue = new Map(), setFalse = new Map(), toggled = new Set(), setAny = new Set();
 const reads = new Set();
+const clickSets = new Map();
 const toTry = [];
 const readIds = v => { if (!v) return; if (Array.isArray(v)) v.forEach(readIds); else if (v.id) reads.add(v.id); };
-let dangling = 0;
 for (const { n, own, inside, ancVis } of all) {
   if (n.boundVariables) for (const k of Object.keys(n.boundVariables)) readIds(n.boundVariables[k]);
   if (n.type === 'INSTANCE' && n.componentProperties) for (const p of Object.values(n.componentProperties)) readIds(p.boundVariables && p.boundVariables.value);
   if (!('reactions' in n) || !n.reactions.length) continue;
   const hovers = n.reactions.filter(r => r.trigger && r.trigger.type === 'ON_HOVER').length;
   if (hovers > 1) flag('duplicate-hover', 'warn', 'two hover reactions on one layer (a hover re-added by a variant change): the first one wins and the state can stick', n);
-  if (own && ['FRAME', 'RECTANGLE', 'COMPONENT'].includes(n.type) && !hasAnyFill(n)) {
-    if (n.type === 'FRAME' && n.children.length) flag('reaction-frame-no-fill', 'info', 'a frame with a reaction and no fill: a click on its children reaches it; if it does not respond in Present, add a fill with opacity 0', n);
-    else flag('reaction-no-fill', 'error', 'an empty layer with a reaction and no fill: a click goes through it (a fill with opacity 0 works)', n);
-  }
   if (own && n.reactions.some(r => r.trigger && r.trigger.type === 'ON_CLICK') && Math.min(n.width, n.height) < 24) flag('small-target', 'warn', 'clickable layer smaller than 24px', n, Math.round(n.width) + 'x' + Math.round(n.height));
+  if (own && 'findAll' in n && n.reactions.some(r => r.trigger && r.trigger.type === 'ON_CLICK')) {
+    const nb = n.absoluteBoundingBox;
+    for (const d of n.findAll(x => x.type === 'INSTANCE' && x.visible !== false)) {
+      const db = d.absoluteBoundingBox;
+      if (!nb || !db || Math.abs(db.width - nb.width) > 2 || Math.abs(db.height - nb.height) > 2) continue;
+      const dm = await d.getMainComponentAsync();
+      const set = dm && dm.parent && dm.parent.type === 'COMPONENT_SET' ? dm.parent : null;
+      if (!set) continue;
+      if (!clickSets.has(set.id)) clickSets.set(set.id, set.children.some(v => (v.reactions || []).some(r => r.trigger && r.trigger.type === 'ON_CLICK')));
+      if (clickSets.get(set.id)) { flag('click-consumed', 'error', 'a layer with On click wraps a component whose variants have an On click of their own (' + set.name + '): the component takes the click and this layer never receives it; put On click on an absolute layer above the component', n, set.name); break; }
+    }
+  }
   if (own && toTry.length < 15) {
     const parts = [];
     for (const r of n.reactions) {
       const acts = [];
       for (const a of rxActions(r)) {
-        if (a.type === 'SET_VARIABLE') { const v = await getV(a.variableId); const lit = a.variableValue && a.variableValue.value; acts.push('sets ' + (v ? v.name : '?') + (typeof lit === 'boolean' ? ' to ' + lit : ' (toggle)')); }
+        if (a.type === 'SET_VARIABLE') { const v = await getV(a.variableId); const lit = a.variableValue && a.variableValue.value; acts.push('sets ' + (v ? v.name : '?') + (typeof lit === 'boolean' || typeof lit === 'number' ? ' to ' + lit : typeof lit === 'string' ? ' to "' + lit + '"' : ' (toggle)')); }
         else if (a.type === 'NODE') acts.push((a.navigation || 'goes').toLowerCase());
       }
       if (acts.length) parts.push(r.trigger.type.toLowerCase().replace('_', ' ') + ' ' + acts.join(', '));
@@ -238,15 +271,19 @@ for (const [id, n] of setFalse) { if (!setTrue.has(id) && !toggled.has(id)) { co
 for (const id of setAny) { if (!reads.has(id)) { const v = await getV(id); if (v) flag('variable-not-read', 'warn', 'a variable is set by a reaction and nothing is bound to it', null, v.name); } }
 const owners = new Map();
 for (const { n } of all) {
-  if (n.type !== 'INSTANCE' || !n.componentProperties) continue;
+  if (n.type !== 'INSTANCE' || !n.componentProperties || !OVERLAY_SETS.has(await setNameOf(n))) continue;
   for (const [k, p] of Object.entries(n.componentProperties)) {
     const id = p.boundVariables && p.boundVariables.value && p.boundVariables.value.id;
     if (id && /^(active|open|show|visible)(#|$)/.test(k)) { const l = owners.get(id) || []; l.push(n); owners.set(id, l); }
   }
 }
-for (const [id, list] of owners) { if (list.length > 1) { const v = await getV(id); flag('shared-variable', 'warn', 'several overlays are bound to one variable and open together', list[0], (v ? v.name : id) + ' x' + list.length); } }
+for (const [id, list] of owners) {
+  const byScreen = new Map();
+  for (const n of list) { const s = screenOf(n).id; byScreen.set(s, [...(byScreen.get(s) || []), n]); }
+  for (const l of byScreen.values()) if (l.length > 1) { const v = await getV(id); flag('shared-variable', 'warn', 'several overlays on one screen are bound to one variable and open together', l[0], (v ? v.name : id) + ' x' + l.length); }
+}
 for (const { n } of all) {
-  if (!n.boundVariables || !n.boundVariables.visible || n.type === 'SECTION') continue;
+  if (!n.boundVariables || !n.boundVariables.visible || n.type === 'SECTION' || inFlow(n)) continue;
   const v = await getV(n.boundVariables.visible.id);
   try { if (v && v.resolvedType === 'BOOLEAN' && n.visible === true && v.resolveForConsumer(n).value === true && /open|show|visible/.test(v.name)) flag('open-at-start', 'info', 'an overlay variable is true: the overlay is open when the prototype starts', n, v.name); } catch (e) {}
 }

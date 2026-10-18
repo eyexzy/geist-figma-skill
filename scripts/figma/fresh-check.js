@@ -1,5 +1,5 @@
 // Read-only freshness fingerprint for use_figma. Returns one JSON string under 20 KB; compare it with `node scripts/lookup.mjs fresh compare <file>`.
-// MODE 'quick': library file, variables, styles and page names (seconds). MODE 'full': also every component page, set keys, icon keys and documentation text.
+// MODE 'quick': library file, variables, styles and page names (seconds). MODE 'full': also every component page, icon names and documentation text.
 // MODE 'consumer': a file that uses the published library; reads variable collections through figma.teamLibrary (names and types, not values).
 // Leave MODE_SETTING as 'auto' to get 'quick' in the library file (it has pages named "↳ ...") and 'consumer' in any other file; set 'full' when the answer rests on the written guidelines.
 const MODE_SETTING = 'auto';
@@ -7,8 +7,6 @@ const MODE = MODE_SETTING !== 'auto' ? MODE_SETTING : (figma.root.children.some(
 
 const fnv = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
 const hx = c => { const t = x => Math.round(x * 255).toString(16).padStart(2, '0'); return '#' + t(c.r) + t(c.g) + t(c.b) + (c.a !== undefined && c.a < 1 ? t(c.a) : ''); };
-const byName = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
-const pairs = list => fnv(list.slice().sort(byName).map(x => x[0] + '=' + x[1]).join('\n'));
 
 if (MODE === 'consumer') {
   const libs = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
@@ -59,32 +57,28 @@ const out = {
     variables: fnv(vrows.join('\n')),
     styles: fnv(srows.join('\n')),
     pages: fnv(pageNames.join('\n')),
-    styleKeys: fnv([text, eff, paint, grid].map(l => pairs(l.map(s => [s.name, s.key]))).join('|')),
   },
 };
 
 if (MODE === 'full') {
   let sets = 0, variants = 0;
-  const setRows = [], setKeys = [];
+  const setRows = [];
   for (const p of pages) {
-    const documented = docs[p.name.slice(2)] !== undefined;
     for (const s of p.findAllWithCriteria({ types: ['COMPONENT_SET'] })) {
       sets++;
       variants += s.children.length;
       setRows.push(p.name + '|' + s.name + '|' + s.children.length + '|' + Object.keys(s.componentPropertyDefinitions).map(k => k.split('#')[0]).sort().join(','));
-      if (documented) setKeys.push([s.name, s.key]);
     }
   }
   const iconPage = figma.root.children.find(p => p.name === '↳ Icons');
   await iconPage.loadAsync();
-  const icons = iconPage.findAllWithCriteria({ types: ['COMPONENT'] }).map(c => [c.name, c.key]);
+  const icons = iconPage.findAllWithCriteria({ types: ['COMPONENT'] }).map(c => c.name);
   out.counts.componentPages = pages.length;
   out.counts.componentSets = sets;
   out.counts.variants = variants;
   out.counts.icons = icons.length;
   out.hash.sets = fnv(setRows.sort().join('\n'));
-  out.hash.setKeys = pairs(setKeys);
-  out.hash.iconKeys = pairs(icons);
+  out.hash.iconNames = fnv(icons.slice().sort().join('\n'));
   out.hash.docs = fnv(Object.keys(docs).sort().map(k => k + docs[k]).join('\n'));
   out.docsByPage = docs;
 }

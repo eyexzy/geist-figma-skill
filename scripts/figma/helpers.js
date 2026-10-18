@@ -1,6 +1,6 @@
 // Helpers for use_figma. Do not paste this whole file: run `node scripts/lookup.mjs helpers <names>` to print only the functions you need, with their dependencies.
-// Resolution is by name. In the library file everything is read locally. In a file that uses the published library, components and styles are imported by the
-// keys in GEIST_KEYS (print them with `node scripts/lookup.mjs keys ...`) and variables are found by name through figma.teamLibrary.
+// Resolution is by name. In the library file, or a copy of it, everything is read locally. In a file that uses the published library, components and styles are
+// imported by the keys in GEIST_KEYS (`node scripts/lookup.mjs keys ...` prints what to search for and the line to fill) and variables are found by name through figma.teamLibrary.
 
 // Hidden layers of an instance (the panel and backdrop of a closed overlay, the list of a closed menu) are skipped unless this is off: read and edit them.
 figma.skipInvisibleInstanceChildren = false;
@@ -9,7 +9,7 @@ const geistCache = { sets: new Map(), icons: null, vars: new Map(), local: null,
 const geistKeys = typeof GEIST_KEYS === 'undefined' ? { sets: {}, icons: {}, styles: {} } : GEIST_KEYS;
 const geistRadius = { 0: 'none', 1: '1', 2: 'xs', 4: 'sm', 5: '5', 6: 'md', 8: 'lg', 10: '10', 12: 'xl', 14: '14', 16: '2xl', 24: '3xl', 9999: 'full' };
 
-// Component set by name. Library file: found on its page. Elsewhere: imported by key from GEIST_KEYS.sets.
+// Component set by name. Library file: found on its page. Elsewhere: imported by the key in GEIST_KEYS.sets.
 async function geistSet(name) {
   if (geistCache.sets.has(name)) return geistCache.sets.get(name);
   const ref = geistKeys.sets[name];
@@ -20,7 +20,11 @@ async function geistSet(name) {
     await page.loadAsync();
     set = page.findAllWithCriteria({ types: ['COMPONENT_SET'] }).find(s => s.name === name) || null;
   }
-  if (!set) set = await figma.importComponentSetByKeyAsync(ref.key);
+  if (!set) {
+    if (!ref.key) throw new Error(`Set "${name}" is not in this file and GEIST_KEYS has no key for it. In a file that uses the published library read the key with search_design_system (componentSetKey of the entry of the Geist library) and put it in GEIST_KEYS.sets. Run: node scripts/lookup.mjs keys set:${name}`);
+    try { set = await figma.importComponentSetByKeyAsync(ref.key); }
+    catch (e) { throw new Error(`Set "${name}" did not import by its key (${e.message}). Read the key again with search_design_system: the entry of the Geist library that is enabled in this file, field componentSetKey.`); }
+  }
   geistCache.sets.set(name, set);
   return set;
 }
@@ -37,8 +41,10 @@ async function geistIcon(name) {
   }
   if (geistCache.icons.has(name)) return geistCache.icons.get(name);
   const key = geistKeys.icons[name];
-  if (!key) throw new Error(`No key for icon "${name}". Look it up with: node scripts/lookup.mjs icon <word>, then run: node scripts/lookup.mjs keys icon:${name}`);
-  const c = await figma.importComponentByKeyAsync(key);
+  if (!key) throw new Error(`Icon "${name}" is not in this file and GEIST_KEYS has no key for it. Check the name with: node scripts/lookup.mjs icon <word>. In a file that uses the published library read the key with search_design_system (componentKey of the entry of the Geist library) and put it in GEIST_KEYS.icons. Run: node scripts/lookup.mjs keys icon:${name}`);
+  let c;
+  try { c = await figma.importComponentByKeyAsync(key); }
+  catch (e) { throw new Error(`Icon "${name}" did not import by its key (${e.message}). Read the key again with search_design_system: the entry of the Geist library that is enabled in this file, field componentKey.`); }
   geistCache.icons.set(name, c);
   return c;
 }
@@ -143,14 +149,17 @@ async function geistNumber(node, field, varName) {
   for (const f of fields) node.setBoundVariable(f, v);
 }
 
-// Text, effect, paint or grid style by name: local in the library file, imported by key elsewhere.
+// Text, effect, paint or grid style by name: local in the library file, imported by the key in GEIST_KEYS.styles elsewhere.
 async function geistStyle(kind, name) {
   const cacheKey = kind + '|' + name;
   if (geistCache.styles.has(cacheKey)) return geistCache.styles.get(cacheKey);
   const list = kind === 'text' ? await figma.getLocalTextStylesAsync() : kind === 'effect' ? await figma.getLocalEffectStylesAsync() : kind === 'grid' ? await figma.getLocalGridStylesAsync() : await figma.getLocalPaintStylesAsync();
   let style = list.find(s => s.name === name) || null;
-  if (!style && geistKeys.styles[name]) style = await figma.importStyleByKeyAsync(geistKeys.styles[name]);
-  if (!style) throw new Error(`${kind} style "${name}" not found. Look it up with: node scripts/lookup.mjs style <words>, then run: node scripts/lookup.mjs keys style:${name}`);
+  if (!style && geistKeys.styles[name]) {
+    try { style = await figma.importStyleByKeyAsync(geistKeys.styles[name]); }
+    catch (e) { throw new Error(`${kind} style "${name}" did not import by its key (${e.message}). Read the key again with search_design_system: the entry of the Geist library that is enabled in this file, field key.`); }
+  }
+  if (!style) throw new Error(`${kind} style "${name}" is not in this file and GEIST_KEYS has no key for it. Check the name with: node scripts/lookup.mjs style <words>. In a file that uses the published library read the key with search_design_system (field key of the style of the Geist library) and put it in GEIST_KEYS.styles. Run: node scripts/lookup.mjs keys style:${name}`);
   geistCache.styles.set(cacheKey, style);
   return style;
 }

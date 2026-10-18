@@ -9,7 +9,7 @@ Facts in this skill come from the Figma file and from public Vercel and Geist ma
 
 ## The Figma file
 
-Component properties, variants, variables, styles, icons, keys, prototype reactions, the Figma Guidelines, Examples, and the pages `↳ Colors`, `↳ Typography`, `↳ Materials` and `↳ Icons` were read from the Figma file `FV7WoolwA4hN58QpnEPfVZ`. When anything here disagrees with the file, the file wins. `data/stamp.json` records the state of the file that the data was taken from, and `scripts/figma/fresh-check.js` compares it with the file as it is now.
+Component properties, variants, variables, styles, icons, prototype reactions, the Figma Guidelines, Examples, and the pages `↳ Colors`, `↳ Typography`, `↳ Materials` and `↳ Icons` were read from the Geist library file in Figma, published as "Geist Design System (Unofficial)" in the Figma Community. When anything here disagrees with the file you work in, the file wins. `data/stamp.json` records the state of the library that the data was taken from, and `scripts/figma/fresh-check.js` compares it with the file as it is now.
 
 ## Geist and Vercel material
 

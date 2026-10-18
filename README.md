@@ -43,7 +43,7 @@ git clone https://github.com/eyexzy/geist-figma-skill ~/.claude/skills/geist-fig
   ```
 
 - Node.js 18 or newer for `scripts/lookup.mjs`.
-- The Geist library in the Figma file you work in: the library file itself, or a file with the published library enabled (Assets, Libraries).
+- The Geist library in the Figma file you work in: the library file itself, a copy of it, or a file with the published library enabled (Assets, Libraries).
 
 ## Usage
 
@@ -59,7 +59,7 @@ Review this frame against Geist.
 
 | Mode | The agent |
 |---|---|
-| **Advise** | Names the component and set, the properties to set with exact names and values, the default, the labels its guidelines ask for, and the Figma link. |
+| **Advise** | Names the component and set, the properties to set with exact names and values, the default, the labels its guidelines ask for, and the Figma page. |
 | **Build** | Places library instances and sets them through properties, not overrides. Binds fills, strokes, spacing, radius and text to variables and styles. Sets Light or Dark on the frame. Wires each overlay to a boolean variable of its own. |
 | **Review** | Runs the audit on a frame, takes screenshots of each state and checks every component against its documentation. Reports each problem with the node and the exact fix. |
 
@@ -79,11 +79,9 @@ On top of the knowledge sits a method. A designer finds what an agent leaves wro
 6. **Audit, then review.** The audit runs until it is clean, and a fresh review reads the result against [`rules/review-geist.md`](rules/review-geist.md).
 7. **Report with evidence.** What was built, the evidence, what only a pointer can test in Present, and every choice that was the agent's own.
 
-When something does not behave, [`rules/when-it-misbehaves.md`](rules/when-it-misbehaves.md) takes over: reproduce it, read before guessing, compare with a clean instance, change one thing at a time.
-
 ### The audit
 
-`scripts/figma/audit.js` reads a frame, a section or an instance and changes nothing. It has 47 checks on three levels (errors, warnings, info):
+`scripts/figma/audit.js` reads a frame, a section or an instance and changes nothing. It reports on three levels (errors, warnings, info) in six groups:
 
 | Group | What it finds |
 |---|---|
@@ -91,7 +89,7 @@ When something does not behave, [`rules/when-it-misbehaves.md`](rules/when-it-mi
 | Geometry | positions on a fraction of a pixel, layers beyond their screen, Clip content that cuts a child or a material border, text collapsed to a sliver |
 | Overlays | an overlay that opens outside the screen, under later layers or cut by a clipping parent, even while a variable hides it |
 | Instances | a missing main component, a look-alike frame, parts restyled by hand, a hover replaced by reactions on the instance, copy left at its default |
-| Prototype | a variable set to true and never to false, a variable shared by several overlays, hover inside hover, a layer with a reaction and no fill, a clickable layer under 24 px |
+| Prototype | a variable set to true and never to false, a variable shared by several overlays, hover inside hover, a click that the wrapped component takes before the layer around it, a clickable layer under 24 px |
 | Theme | the mode of `DS / Core Colors` on every screen |
 
 It also prints `toTryInPresent`, the interactions of the design that only a pointer can test.
@@ -101,7 +99,7 @@ It also prints `toTryInPresent`, the interactions of the design that only a poin
 | Folder | Contents |
 |---|---|
 | [`component-docs/`](component-docs) | The card of each component: when to use it, properties and defaults, nested parts and slots, labels and messages, behavior, accessibility, layout values and motion. The same text as the documentation frames of the Figma file. |
-| [`data/`](data) | Component sets with their properties, variables with their values in Light and Dark, text and effect styles, icons with search synonyms, prototype reactions, import keys and the fingerprint of the file the data was read from. |
+| [`data/`](data) | Component sets with their properties, variables with their values in Light and Dark, text and effect styles, icons with search synonyms, prototype reactions and the fingerprint of the file the data was read from. |
 | [`rules/`](rules) | Which component for which need, which color, text style, material, spacing and motion for which job, copy, accessibility, the models of Figma behavior and the review procedure. |
 | [`recipes/`](recipes) | Building a screen, configuring an instance, forms, and overlays that open and close in a prototype. |
 | [`scripts/`](scripts) | `lookup.mjs`, an offline search of all of the above, and `figma/`, the scripts the agent runs through `use_figma`: helpers, the audit, the freshness check. |
@@ -119,7 +117,7 @@ It also prints `toTryInPresent`, the interactions of the design that only a poin
 | `icon <words>` | icon names by meaning ("delete", "settings") |
 | `check "<Set>: k=v ..."` | validates a plan before building: set, part, property and value |
 | `audit <node id>`, `helpers [names]` | the audit and the helper functions, ready to paste into `use_figma` |
-| `keys <refs>`, `fresh [compare <file>]` | import keys for a file that uses the published library, the freshness stamp |
+| `keys <refs>`, `keys from <file>`, `fresh [compare <file>]` | the search to run and the `GEIST_KEYS` to fill for a file that uses the published library, the freshness stamp |
 | `rule [name] [section]`, `example <slug>` | a rule file or one section, how the Examples of a component are set up |
 
 ### Layout

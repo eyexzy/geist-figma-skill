@@ -1,7 +1,7 @@
 // Read-only: shows how the Examples of a component page are configured, for use_figma. Set PAGE to the page name ('↳ Modal'). Changes nothing.
 // For every example it prints the instance, the properties that differ from the default (swap values as names), variables bound to properties and visibility,
 // the layout of the frames around slot content, text, the wiring added in the example (clicks that set variables) and what each variable is for.
-// Hidden layers of instances are read too (the setting below). If the content of an overlay whose open state is bound to a variable is still missing, read the component guidelines for it. Use it to copy a realistic configuration.
+// Hidden layers of instances are read too (the setting below). If the content of an overlay whose open state is bound to a variable is still missing, read the component guidelines for it. The configuration of an example is a working one: build from it what the task needs, including its variables.
 figma.skipInvisibleInstanceChildren = false;
 const PAGE = '↳ Button';
 const MAX_DEPTH = 7;

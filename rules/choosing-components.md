@@ -185,4 +185,4 @@ The Geist site has component pages that have no set in this file. Read the page 
 | Sidebar | the navigation column of an application | none, built from frames (below) |
 | Top bar | the bar along the top of an application | none, built from frames (below) |
 
-Sidebar and top bar are built as named auto layout frames on the grid style `Layout/App Shell 1220` (260 sidebar and content), put library parts inside and bind their fills, strokes, spacing and text to the library variables and styles. Say in the answer which frames are built this way and are not library parts.
+The file has the grid style `Layout/App Shell 1220` (a 260 sidebar and the content); `spacing-and-layout.md` describes it. A sidebar or a top bar is composed from frames and library parts with the variables and styles of the file.

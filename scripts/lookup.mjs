@@ -34,12 +34,12 @@ const HELP = `Geist Figma library lookup
   rule [name] [section]   the rules for when to use what; no name: list them
   check "<Set>: k=v ..."  validate a plan before building: set, part ("Input > Label: value=Name"), properties and values
   audit <node id>         scripts/figma/audit.js with ROOT_ID set, ready to paste into use_figma (a frame, a section or an instance)
-  helpers [names] [--min] functions of scripts/figma/helpers.js to paste into use_figma, with dependencies; --min drops the comments
-  keys <refs>             import keys for a file that uses the published library (set:Button icon:Trash style:Copy/14)
+  helpers [names] [--comments] functions of scripts/figma/helpers.js to paste into use_figma, with dependencies, without comment lines; --comments keeps them
+  keys <refs>             what to search for and the GEIST_KEYS to fill in a file that uses the published library (set:Button icon:Trash style:Copy/14)
+  keys from <file> [refs] GEIST_KEYS built from a saved search_design_system result
   fresh [compare <file>]  freshness stamp of this data and how to compare it with the live file
   list                    all components by category`;
 
-const HAS_SPECS = fs.existsSync(path.join(ROOT, 'component-specs'));
 const components = () => loadJson('components.json').components;
 
 function findComponent(name) {
@@ -129,11 +129,10 @@ function printSection(dir, slug, name) {
   const md = readFile(`${dir}/${slug}.md`);
   if (!md) fail(`No ${dir} file for "${slug}". Run: list`);
   const { lines, list } = sections(md);
-  const cmdName = dir === 'component-specs' ? 'spec' : 'guide';
   if (!name) {
     out(`${dir}/${slug}.md sections:`);
     list.forEach(s => out(`${'  '.repeat(s.level - 2)}- ${s.title}`));
-    out(`\nRun: ${cmdName} ${slug} "<section>" to print one. A ## title includes its ### subsections.`);
+    out(`\nRun: guide ${slug} "<section>" to print one. A ## title includes its ### subsections.`);
     return;
   }
   const want = name.toLowerCase();
@@ -154,11 +153,11 @@ function propsTable(set) {
 function showComponent(c) {
   out(`# ${c.name}  (${c.category})`);
   out(c.description);
-  out(`Figma page: ${c.page.name}  ${c.page.url}` + (c.vercel ? `\nSite: ${c.vercel}` : ''));
+  out(`Figma page: ${c.page.name}` + (c.vercel ? `\nSite: ${c.vercel}` : ''));
   for (const s of c.sets) {
     out(`\n## Set: ${s.name}${s.helper ? '  [helper set, a part of a bigger component; place the public set]' : ''}`);
     out(`variants: ${s.variants}   default variant: ${s.defaultVariant}`);
-    out(`link: ${s.url}`);
+    if (s.combos) out(`Not every combination of the variant properties exists (${s.variants} of ${gridSize(s)}); check tells which ones do.`);
     if (s.exposed && s.exposed.length) out(`exposed nested instances (geistNested(inst, "<name>", props)): ${s.exposed.map(e => `${e.name} (${e.set})`).join(', ')}`);
     if (s.contains.length) out(`contains: ${s.contains.join(', ')}`);
     if (s.usedIn.length) out(`used inside: ${s.usedIn.join(', ')}`);
@@ -228,14 +227,16 @@ function showTokens(query) {
   return { shown, best };
 }
 
+function keyNames() {
+  const setPage = Object.fromEntries(components().flatMap(c => c.sets.map(s => [s.name, c.page.name])));
+  return { setPage, icons: loadJson('icons.json'), styles: Object.values(loadJson('styles.json')).flat().map(s => s.name) };
+}
+
+// The refs of a plan, resolved to exact names. The data holds no import keys (they differ between the original file and its Community copy), so each value is empty.
 function resolveKeys(args) {
-  const comps = components();
+  const { setPage, icons, styles } = keyNames();
   const result = { sets: {}, icons: {}, styles: {} };
-  const styleKeys = Object.fromEntries(Object.values(loadJson('styles.json')).flat().map(s => [s.name, s.key]));
-  const iconKeys = loadJson('icons.json');
-  const lower = obj => Object.fromEntries(Object.keys(obj).map(k => [k.toLowerCase(), k]));
-  const setIndex = Object.fromEntries(comps.flatMap(c => c.sets.map(s => [s.name, { page: c.page.name, key: s.key }])));
-  const maps = { set: setIndex, icon: iconKeys, style: styleKeys };
+  const names = { set: Object.keys(setPage), icon: icons, style: styles };
   const target = { set: 'sets', icon: 'icons', style: 'styles' };
   const missing = [];
   for (const arg of args) {
@@ -244,13 +245,41 @@ function resolveKeys(args) {
     const name = m ? m[2] : arg;
     let found = false;
     for (const kind of kinds) {
-      const map = maps[kind];
-      const exact = map[name] ? name : lower(map)[name.toLowerCase()];
-      if (exact) { result[target[kind]][exact] = map[exact]; found = true; }
+      const exact = names[kind].find(n => n === name) || names[kind].find(n => n.toLowerCase() === name.toLowerCase());
+      if (!exact) continue;
+      result[target[kind]][exact] = kind === 'set' ? { page: setPage[exact], key: '' } : '';
+      found = true;
     }
     if (!found) missing.push(arg);
   }
   return { result, missing };
+}
+
+const parseRefs = (q, rest) => /(?:^|\s)(?:set|icon|style):/.test(q) ? q.split(/\s+(?=(?:set|icon|style):)/).map(x => x.replace(/,$/, '').trim()) : q.includes(',') ? q.split(',').map(x => x.trim()) : rest;
+
+// GEIST_KEYS from a saved search_design_system result: the entries of the Geist library, matched to the names of the data.
+function keysFromSearch(file, refArgs) {
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return { error: 'Cannot read ' + file + ' as JSON: ' + e.message }; }
+  const list = Array.isArray(raw) ? raw : raw.results || [raw];
+  const entries = list.flatMap(r => [...(r.components || []), ...(r.styles || [])]).filter(x => /^Geist Design System/i.test(x.libraryName || ''));
+  const { setPage, icons, styles } = keyNames();
+  const iconSet = new Set(icons), styleSet = new Set(styles);
+  const result = { sets: {}, icons: {}, styles: {} };
+  for (const x of entries) {
+    if (x.componentSetKey && setPage[x.name]) result.sets[x.name] = { page: setPage[x.name], key: x.componentSetKey };
+    else if (x.componentKey && iconSet.has(x.name)) result.icons[x.name] = x.componentKey;
+    else if (x.styleType && x.key && styleSet.has(x.name)) result.styles[x.name] = x.key;
+  }
+  const libraries = [...new Set(entries.map(x => x.libraryName + ' ' + x.libraryKey))];
+  const notFound = [];
+  if (refArgs.length) {
+    const { result: want, missing } = resolveKeys(refArgs);
+    notFound.push(...missing);
+    for (const k of ['sets', 'icons', 'styles']) for (const n of Object.keys(want[k])) if (!result[k][n]) notFound.push(k.slice(0, -1) + ':' + n);
+    for (const k of ['sets', 'icons', 'styles']) for (const n of Object.keys(result[k])) if (!(n in want[k])) delete result[k][n];
+  }
+  return { result, libraries, notFound, entries: entries.length };
 }
 
 function helperBlocks() {
@@ -277,8 +306,8 @@ function helperBlocks() {
 }
 
 function showHelpers(args) {
-  const min = args.includes('--min');
-  const names = args.filter(a => a !== '--min');
+  const keep = args.includes('--comments');
+  const names = args.filter(a => a !== '--comments');
   const { blocks, shared } = helperBlocks();
   const byName = new Map(blocks.map(b => [b.name, b]));
   if (!names.length) {
@@ -296,7 +325,7 @@ function showHelpers(args) {
   };
   (names.includes('all') ? blocks.map(b => b.name) : names).forEach(add);
   const code = shared + '\n\n' + blocks.filter(b => want.has(b.name)).map(b => b.text).join('\n\n');
-  out(min ? code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//')).join('\n') : code);
+  out(keep ? code : code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//')).join('\n'));
 }
 
 function sectionBlock(slug, title) {
@@ -312,11 +341,12 @@ function sectionBlock(slug, title) {
 
 function showBrief(c) {
   out(`# ${c.name}: ${c.description}`);
-  out(`Figma page: ${c.page.name}  ${c.page.url}`);
+  out(`Figma page: ${c.page.name}`);
   const pub = c.sets.filter(s => !s.helper);
   for (const s of pub) {
     out(`\nSet ${s.name}, default ${s.defaultVariant}`);
     out(s.props.map(p => p.type === 'VARIANT' ? `${p.name}=${p.default} (${p.options.join('|')})` : `${p.name}=${p.default} (${p.type.toLowerCase()})`).join('; '));
+    if (s.combos) out(`Not every combination of the variant properties exists (${s.variants} of ${gridSize(s)}); check "${s.name}: ..." before you build.`);
     if (s.exposed && s.exposed.length) out(`exposed parts: ${s.exposed.map(e => e.name).join(', ')}`);
   }
   if (!pub.length) out('\nNo set of its own: a composition of other library components (see Assembly).');
@@ -327,6 +357,8 @@ function showBrief(c) {
   for (const t of ['States', 'Assembly']) { const b = sectionBlock(c.slug, t); if (b.length) out('\n' + b.join('\n').trim()); }
   out(`\nMore: guide ${c.slug} Accessibility | guide ${c.slug} Layout | example ${c.slug} | motion ${c.slug}`);
 }
+
+const gridSize = s => s.props.filter(p => p.type === 'VARIANT').reduce((a, p) => a * p.options.length, 1);
 
 function checkSpec(spec, iconNames) {
   const sets = components().flatMap(c => c.sets);
@@ -355,6 +387,14 @@ function checkSpec(spec, iconNames) {
     if (p.type === 'BOOLEAN' && v !== 'true' && v !== 'false') errs.push(`${label}.${k} is true or false, got "${v}"`);
     if (p.type === 'INSTANCE_SWAP' && !iconNames.has(v)) errs.push(`${label}.${k}: "${v}" is not an icon name; find one with: icon <words>`);
     if (p.type === 'SLOT') errs.push(`${label}.${k} is a slot: drop layers into it, it takes no value`);
+  }
+  if (set.combos && !errs.length) {
+    const want = [...m[3].matchAll(/([A-Za-z0-9]+)=(?:"([^"]*)"|(\S+))/g)].map(x => [x[1], x[2] ?? x[3]]).filter(([k]) => set.props.some(p => p.name === k && p.type === 'VARIANT'));
+    const rows = set.combos.map(n => Object.fromEntries(n.split(', ').map(kv => kv.split('='))));
+    if (want.length > 1 && !rows.some(r => want.every(([k, v]) => r[k] === v))) {
+      const hints = want.map(([k]) => { const others = want.filter(([x]) => x !== k); const ok = [...new Set(rows.filter(r => others.every(([x, v]) => r[x] === v)).map(r => r[k]))]; return ok.length ? `${k} is ${ok.join(' | ')} with ${others.map(([x, v]) => x + '=' + v).join(' ')}` : null; }).filter(Boolean);
+      errs.push(`${label}: no variant has ${want.map(([k, v]) => k + '=' + v).join(' ')} together (${set.combos.length} of ${gridSize(set)} combinations exist)` + (hints.length ? '. ' + hints.join('; ') : ''));
+    }
   }
   return { errs, notes, label };
 }
@@ -400,7 +440,7 @@ switch (cmd) {
   }
   case 'check': {
     if (!rest.length) { out('Usage: check "Button: variant=error size=large prefix=Trash label=\\"Delete Project\\"" "Input > Label: value=Name"\nOne quoted argument per instance. Exits with 1 when something is wrong.'); break; }
-    const iconNames = new Set(Object.keys(loadJson('icons.json')));
+    const iconNames = new Set(loadJson('icons.json'));
     let bad = 0;
     for (const spec of rest) {
       const { errs, notes, label } = checkSpec(spec, iconNames);
@@ -411,16 +451,11 @@ switch (cmd) {
     break;
   }
   case 'guide': { const [slug, ...s] = rest; printSection('component-docs', slug || '', s.join(' ')); break; }
-  case 'spec': {
-    if (!HAS_SPECS) { out('No bundled specs in this copy. Run: layout <slug>'); break; }
-    const [slug, ...s] = rest; printSection('component-specs', slug || '', s.join(' ')); break;
-  }
   case 'layout': {
     const c = q ? findComponent(q) : null;
     if (!c) { out('Usage: layout <slug>   e.g. layout fieldset'); break; }
-    out(`# Layout of ${c.name}\nThe exact layout, sizes and variable bindings are read from the Figma file, so they are always current. Run scripts/figma/read-layout.js through use_figma with PAGE set to "${c.page.name}", SET to one of the names below and VARIANT to a variant name (empty for the default variant).`);
+    out(`# Layout of ${c.name}\nThe exact layout, sizes and variable bindings are read from the Figma file, so they are always current. Run scripts/figma/read-layout.js through use_figma with PAGE set to "${c.page.name}", SET to one of the names below and VARIANT to a variant name (empty for the default variant). It reads the component pages, so it works in the library file or a copy of it; a file that only uses the published library has none.`);
     for (const s of c.sets) out(`- SET "${s.name}"${s.helper ? ' (helper)' : ''}: default variant ${s.defaultVariant}, ${s.variants} variants`);
-    out(`\nLink to the page: ${c.page.url}`);
     break;
   }
   case 'motion': {
@@ -507,11 +542,26 @@ switch (cmd) {
   }
   case 'helpers': showHelpers(rest); break;
   case 'keys': {
-    if (!rest.length) { out('Usage: keys <refs>   e.g. keys set:Button set:Input icon:Trash style:Copy/14 style:ds/shadow/menu\nPrints a const GEIST_KEYS line to paste above the helpers when the file is not the library file.'); break; }
-    const refs = /(?:^|\s)(?:set|icon|style):/.test(q) ? q.split(/\s+(?=(?:set|icon|style):)/).map(x => x.replace(/,$/, '').trim()) : q.includes(',') ? q.split(',').map(x => x.trim()) : rest;
-    const { result, missing } = resolveKeys(refs);
-    if (missing.length) out(`Not found: ${missing.join(', ')}. Names are exact: component sets (see component <slug>), icons (icon <word>), styles (style <words>).`);
+    if (!rest.length) { out('Usage: keys <refs>   e.g. keys set:Button set:Input icon:Trash style:Copy/14 style:ds/shadow/menu\n       keys from <file> [refs]   build GEIST_KEYS from a saved search_design_system result\nIn the library file, or in a copy of it, sets, icons and styles are read from the file by name. In a file that uses the published library their import keys are read with search_design_system, because they differ between the original library file and its Community copy.'); break; }
+    if (rest[0] === 'from') {
+      if (!rest[1]) { out('Usage: keys from <file> [refs]'); process.exit(1); }
+      const refArgs = rest.length > 2 ? parseRefs(rest.slice(2).join(' '), rest.slice(2)) : [];
+      const r = keysFromSearch(rest[1], refArgs);
+      if (r.error) { out(r.error); process.exit(1); }
+      if (!r.entries) { out('No entry of a library named "Geist Design System..." in that file. Save the whole response of search_design_system as JSON.'); process.exit(1); }
+      const n = Object.values(r.result).reduce((acc, o) => acc + Object.keys(o).length, 0);
+      if (r.libraries.length > 1) out('More than one Geist library in the result (' + r.libraries.join('; ') + '). Search again with includeLibraryKeys for the one this file uses.');
+      if (r.notFound.length) out('Not in the result: ' + r.notFound.join(', ') + '. Search for them and run again.');
+      out(n + ' keys from ' + r.entries + ' entries.');
+      out('const GEIST_KEYS = ' + JSON.stringify(r.result) + ';');
+      break;
+    }
+    const { result, missing } = resolveKeys(parseRefs(q, rest));
+    if (missing.length) out('Not found: ' + missing.join(', ') + '. Names are exact: component sets (see component <slug>), icons (icon <word>), styles (style <words>).');
+    const queries = [...Object.keys(result.sets).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.icons).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.styles).map(n => ({ entity: 'style', query: n }))];
+    out('In the library file, or in a copy of it, paste this as it is: sets, icons and styles are found by name.');
     out('const GEIST_KEYS = ' + JSON.stringify(result) + ';');
+    out('\nIn a file that uses the published library the import keys come from search_design_system, because the original library file and its Community copy have other keys. Call it with the fileKey of that file and\nqueries = ' + JSON.stringify(queries) + '\nTake the entry whose name is exactly the query and whose libraryName starts with "Geist Design System" (a query also returns neighbors such as "Copy Button" and components of other libraries). Fill the empty strings: componentSetKey of a set into key, componentKey of an icon, key of a style. The first answer carries libraryKey; pass it as includeLibraryKeys in later searches to leave the other libraries out. A large answer can be saved as JSON and turned into the line above: keys from <file> [refs].');
     break;
   }
   case 'fresh': {
@@ -534,11 +584,14 @@ switch (cmd) {
         for (const [k, v] of Object.entries(live.hash || {})) if (stamp.hash[k] !== undefined && stamp.hash[k] !== v) diffs.push(`hash ${k}: data ${stamp.hash[k]}, live ${v}`);
         if (live.docsByPage) for (const [k, v] of Object.entries(live.docsByPage)) if (stamp.docsByPage[k] !== v) diffs.push(`documentation changed: ${k}`);
       }
+      const community = live.mode === 'consumer' ? [...new Set(Object.values(live.collections || {}).map(c => c.library).filter(n => /\(Community\)\s*$/.test(n || '')))] : [];
       if (!diffs.length) out(`FRESH: the file matches the data taken on ${stamp.takenOn} (${live.mode} check).`);
       else { out(`STALE in ${diffs.length} places (data taken on ${stamp.takenOn}):`); diffs.forEach(d => out('- ' + d)); out('Read the changed parts live with use_figma and tell the user that the offline data is out of date for them.'); }
+      if (community.length) out(`
+KEYS: the library is the Community copy (${community.join(', ')}). Sets, icons and styles import by key, and the keys of this file are read with search_design_system (lookup.mjs keys). Variables are found by name and need no keys.`);
       break;
     }
-    out(`Data stamp (taken ${stamp.takenOn} from file ${stamp.fileKey}):`);
+    out(`Data stamp (taken ${stamp.takenOn}):`);
     out(JSON.stringify({ counts: stamp.counts, hash: stamp.hash }, null, 1));
     out('\nRun scripts/figma/fresh-check.js through use_figma: it picks the mode from the file: "quick" in the library file (seconds) and "consumer" in a file that uses the published library; set MODE_SETTING to "full" to read every component page. Save the returned JSON to a file, then run: fresh compare <file>');
     break;
@@ -555,8 +608,8 @@ switch (cmd) {
       for (const n of names) { const k = n.replace(/\d+/, '#'); const num = (n.match(/\d+/) || [])[0]; const e = m.get(k) || { nums: [] }; if (num) e.nums.push(+num); m.set(k, e); }
       return [...m].map(([k, e]) => e.nums.length > 1 ? `${k} (${Math.min(...e.nums)} to ${Math.max(...e.nums)})` : k.replace('#', e.nums[0] ?? '#'));
     };
-    out(`# Examples of ${c.name} on ${c.page.name}\n${c.page.url}`);
-    out(`The structure of the examples (properties, nested parts, the frames that carry the clicks) is read live: run scripts/figma/read-examples.js through use_figma with PAGE set to "${c.page.name}".`);
+    out(`# Examples of ${c.name} on ${c.page.name}`);
+    out(`The structure of the examples (properties, nested parts, the frames that carry the clicks) is read live: run scripts/figma/read-examples.js through use_figma with PAGE set to "${c.page.name}". It reads the component pages, so it works in the library file or a copy of it; a file that only uses the published library has none.`);
     if (!vars.length) { out('\nThese examples have no prototype variables; they show combinations of properties.'); break; }
     const groups = {};
     for (const v of vars) (groups[v.n.split('/')[1] || ''] = groups[v.n.split('/')[1] || ''] || []).push(v);
@@ -584,7 +637,7 @@ switch (cmd) {
     break;
   }
   case 'icon': case 'icons': {
-    const all = Object.keys(loadJson('icons.json'));
+    const all = loadJson('icons.json');
     const syn = loadJson('icon-synonyms.json');
     const qw = words(q);
     if (!qw.length) { out(`${all.length} icons. Search by name or meaning: icon <words>`); break; }

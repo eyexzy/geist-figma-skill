@@ -25,7 +25,7 @@ Check: the audit reports `never-closes`, `never-opens`, `variable-not-read`, `ho
 
 ## Layer order, clipping and open geometry
 
-Later siblings draw over earlier ones, and canvas stacking reverses this inside an auto layout. Clip content cuts everything outside the frame, effects and rings included. An overlay that a variable hides still has its open size and position, so you can measure where it opens before anyone sees it.
+Later siblings draw over earlier ones, and canvas stacking reverses this inside an auto layout. Clip content cuts everything outside the frame, effects and rings included. An overlay that a variable hides and that is positioned absolutely still has its open size and position, so you can measure where it opens before anyone sees it. A layer hidden inside an auto layout leaves the flow: its coordinates are stale while it is hidden, so measure it while it is shown.
 
 - An overlay opens in the direction its component sets (a `position` or `side` property, or the constraint of the instance). Nothing checks that the direction fits the screen.
 - A frame that carries a material border (`ds/shadow/border` and its relatives) draws that border only while its Clip content is on, so such a frame needs padding of at least 4px.
@@ -41,7 +41,7 @@ A centered element sits at `(parent - child) / 2`. When the two sizes differ in 
 
 - Percentage-based parts (a Progress bar) give fractional widths when their container is not a multiple of the step.
 - `resize()` sets fixed sizing, so set the sizing modes after it.
-- In the file's tests `createInstance()` returned an instance positioned absolutely; after placing one in an auto layout read `layoutPositioning` before you set Fill or Hug.
+- `createInstance()` returns an instance with absolute positioning; after placing one in an auto layout read `layoutPositioning` before you set Fill or Hug.
 
 Ask: which sizes are odd, what is centered in what, where does a fraction come from?
 
@@ -62,12 +62,13 @@ Check: the `theme` line, `unbound-fill`, `unbound-stroke`, `text-color-role`, `l
 
 When a layer that reacts contains another that reacts, their states interact. A change of the variant of the outer layer can reset what is inside it, and both hovers can fire at once.
 
+- A click goes to the innermost layer that has an On click. A component whose variants have one (the hover and active states of Input) takes the click, and a frame around it never receives it. Checked in Present: a frame around a Button received the click; a frame around an Input did not, with or without a fill; an absolute layer above either received it, with or without a fill.
 - A click on a nested button that changes the variant of its parent resets the hover of that button.
 - A hover reaction on a layer and the hover reactions of the items of an overlay inside it conflict: after the pointer leaves, the items stay in hover (checked in Present with a table row and a menu inside it).
 
 Ask: for every pair of an outer and an inner reactive layer, what happens to the inner one when the outer one changes state, and the other way round? Can I force each combination and look at it?
 
-Check: `hover-in-hover`.
+Check: `hover-in-hover` and `click-consumed`.
 
 ## Instances and overrides
 

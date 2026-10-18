@@ -10,7 +10,7 @@ metadata:
 
 # Geist Figma Skill
 
-The Geist component library in Figma (file key `FV7WoolwA4hN58QpnEPfVZ`) documents every component: what it is for, how it is set up, what its labels say and how it behaves. This skill carries that documentation, the library's variables and styles and the rules for using them, so an agent can advise on the library, build with it and review designs against it in any file where the library is enabled. The data, the rules and `scripts/lookup.mjs` work offline; the scripts in `scripts/figma/` run in Figma through `use_figma`.
+The Geist component library in Figma documents every component: what it is for, how it is set up, what its labels say and how it behaves. This skill carries that documentation, the library's variables and styles and the rules for using them, so an agent can advise on the library, build with it and review designs against it in any file where the library is enabled. The data, the rules and `scripts/lookup.mjs` work offline; the scripts in `scripts/figma/` run in Figma through `use_figma`.
 
 The Figma file is the source of truth: where it and this skill disagree, the file wins. The Geist site (`vercel.com/geist`) is the source of the library; a difference between the site and the file is not an error, so build from the file and mention the difference only when the user asks about the site.
 
@@ -18,7 +18,7 @@ Answer in the user's language. Keep component, property, variable and style name
 
 ## How to work
 
-The designer you work for finds what you leave wrong, and finds it late: a menu that opens off the screen, a hover that sticks, a border that is not drawn. Work so that there is nothing for them to find. This is the method; the sections below hold the knowledge it uses. Following a step in spirit and skipping it in letter is skipping it.
+The designer you work for finds what you leave wrong, and finds it late: a menu that opens off the screen, a hover that sticks, a border that is not drawn. Work so that there is nothing for them to find. This is the method; the sections below hold the knowledge it uses.
 
 1. **Frame the job first.** Before you touch Figma, write down the screens; every interactive element and each of its states (rest, hover, open, disabled, error, empty, loading, Light, Dark); what sits inside what; what the user must be able to do in Present; and for every text and number the shortest, the typical and the longest value you will test with. Ask the user only what blocks you: what opens what, content you cannot invent. Say every other choice out loud as your assumption and go on: a default the user never heard is one they could not reject.
 2. **Look for what can go wrong, by class.** Read `rules/figma-model.md`. For each of its classes that applies, name the risk in this job and how you will check it. A risk with no check is a risk you accept, and the report says so.
@@ -45,17 +45,7 @@ No claim without evidence from this turn: before you write that something works,
 | It works in Dark | a screenshot in Dark and the mode read from the frame | "I set the mode once" |
 | It fits | the open size and position of each overlay measured inside its frame | it looks fine at rest |
 
-Stop and rethink when you are about to write "should", "probably", "looks good" or "done" about a state you have not looked at, when you add a second reaction, override or frame to repair the first one, or when you repair the same area for the third time. Then follow `rules/when-it-misbehaves.md`: find the cause before the next fix, compare with a clean instance of the component, change one thing at a time, and ask the user after the third failed attempt.
-
-| What you tell yourself | Why it fails |
-|---|---|
-| The audit is clean | It reads geometry and wiring. It cannot hover or click. |
-| The screenshot looks right | It shows the state of that moment. Overlays are closed in it. |
-| I read the card, so I know how it behaves | The card describes the component alone, not your combination of parts. |
-| The component already does this | An instance can replace what its component does; read it back. |
-| It works now, I changed one more thing | Then you do not know which change fixed it. Undo the others. |
-| A fraction of a pixel is invisible | It blurs borders and shadows. |
-| I will note it for later | Note only what you cannot check. Fix the rest. |
+When a build does not behave, find the cause before the next fix. Reproduce the fault in one named state, read the layers involved from the file, place the same library component alone in an empty frame and bring it to that state (if it behaves there, the cause is what you added), change one thing at a time on a copy, and ask the user after the third failed attempt. A second reaction, override or frame added to repair the first one is a sign the cause is not found.
 
 ## The component documentation
 
@@ -77,9 +67,7 @@ Read `node scripts/lookup.mjs brief <slug>` for each component before you recomm
 
 1. Find the component: `find <words>` for a need, `choose <words>` between similar ones, `rules/choosing-components.md` for the full decision tables. A need the library has no component for is in its last section.
 2. Read `brief <slug>`.
-3. Answer with the component and set, the properties to set with exact names and values, the default, one sentence of why from the card, and the Figma link from `component <slug>`. An answer without the property names and the link was written from memory. For a choice between components: the pick and the one condition that would switch it. Do not paste whole property tables unless asked.
-
-> Use Button with `variant=error`, `size=large`, `showPrefix=true`, `prefix=Trash` and `label="Delete Project"`. The default is `variant=default, state=default, shape=default, size=medium`. Confirm it in a Destructive Action Modal: the action deletes a resource, and its Best Practices ask for a typed gate there. Link: the set link from `component button`.
+3. Answer with the component and set, the properties to set with exact names and values, the default, one sentence of why from the card, and the Figma page from `component <slug>`. An answer without the property names and the page was written from memory. For a choice between components: the pick and the one condition that would switch it. Do not paste whole property tables unless asked.
 
 Tokens and styles are chosen the same way: `use <words>` finds the variable, text style, material or spacing for a job; the reasons are in `rules/color.md`, `typography.md`, `materials-and-elevation.md` and `spacing-and-layout.md`. Icons: `icon <words>` understands meanings such as "delete" and "settings".
 
@@ -88,11 +76,9 @@ Tokens and styles are chosen the same way: `use <words>` finds the variable, tex
 Follow the method above. These are the tools of the build:
 
 1. Check the data against the file once per session (below).
-2. Validate the plan before you build: `node scripts/lookup.mjs check "Button: variant=error label=\"Delete Project\"" "Input > Label: value=Name"`. It rejects a set, part, property or value the library does not have.
-3. Build with the recipes: `recipes/build-screen.md` (frames, variables, styles, Light and Dark), `recipes/configure-components.md` (one instance, its properties, slots and states), `recipes/forms.md` (form controls), `recipes/interactive-overlays.md` (anything that opens and closes). Add interactions only when asked.
+2. Validate the plan before you build: `node scripts/lookup.mjs check "Button: variant=error label=\"Delete Project\"" "Input > Label: value=Name"`. It rejects a set, part, property or value the library does not have, and a combination of variant properties that no variant has.
+3. Build with the recipes: `recipes/build-screen.md` (frames, variables, styles, Light and Dark), `recipes/configure-components.md` (one instance, its properties, nested parts, slots and states), `recipes/interactive-overlays.md` (anything that opens and closes). Add interactions only when asked.
 4. Audit and report as steps 6 and 7 say.
-
-> Built "Settings" (Light, `11:2`) and its Dark copy (`11:40`): three Fieldset cards with Input, Select and Toggle, and a danger card with a Button `variant=error`. Fills, spacing, radius and text are bound to the library's variables and styles; the audit reports no errors and mode Light and Dark on the two frames. Looked at: rest, Dark, an error state on the Input. Not done: the prototype, which was not requested. Assumed: the card titles.
 
 Without Figma tools, answer with the exact components, properties and variables the designer should set in the Figma UI.
 
@@ -105,23 +91,25 @@ Follow `rules/review-geist.md`: run the audit on the frame (`lookup.mjs audit <n
 | You would assume | What holds | Read |
 |---|---|---|
 | A new frame is Light | The default mode of `DS / Core Colors` is `Dark`. Set the mode on the root frame of the screen (`geistFrame` option `theme`). | `recipes/build-screen.md` (Light and Dark) |
-| `Switch` is the on/off control | `Switch` is a segmented selector of options. An on/off setting is `Toggle`. | `rules/choosing-components.md` |
 | A part an instance hides does not exist | Parts hidden while an instance is closed (a menu list, an overlay panel) are skipped unless `figma.skipInvisibleInstanceChildren` is `false`. The helpers and the read scripts set it. | `recipes/configure-components.md` (Slots) |
 | A frame around components is harmless | Clip content cuts the borders and rings the components draw outside their edge. `figma.createFrame()` and `figma.createAutoLayout()` turn it on; `geistFrame` leaves it off, except on a frame with an effect style, whose material border is drawn only while Clip content is on. Set `clipsContent = false` on any other frame that holds components. | `rules/materials-and-elevation.md` (Clipping) |
 | An overlay sits above what it is placed over | Later siblings draw over earlier ones: an overlay is an absolute last child, and a menu that opens downward needs canvas stacking `First on top` on the layouts above the content below it. | `recipes/interactive-overlays.md` |
 | One variable runs the prototype | One boolean per overlay. The library `state/*/open` variables are shared by every instance wired to them. `geistRewireReactions` moves the wiring of an instance to your variable. | `recipes/interactive-overlays.md` |
-| A click on the trigger Button is enough | A reaction set on the Button replaces the reactions of its master. Put On click on a frame around the trigger. | `recipes/interactive-overlays.md` |
+| A frame around the trigger gets its click | Only when the trigger component has no click reaction of its own (Button). A component whose variants react to click (Input) takes the click itself: put On click on an absolute hit layer above it. A reaction set on a Button replaces the reactions of its master. | `recipes/interactive-overlays.md` |
 | Select an option on the item | Select on the group (`checked`, `active`). An override on an item survives later changes. | `recipes/configure-components.md` |
 | Text dropped into a slot is styled | It is your own layer, black and without a style. Create it with `geistText`. | `recipes/configure-components.md` (Slots) |
+| This skill carries the keys to import a set, icon or style | It carries none: the original library file and its Community copy have different keys. In a file that uses the published library, read them with `search_design_system`. | `recipes/build-screen.md`, step 2 |
+| Every property of a set combines with every other | Some sets lack combinations of variant properties. `brief <slug>` says which sets, and `check` rejects a combination that does not exist. | `brief <slug>`, `check` |
 | Every Geist page has a component here | Some site components (Entity, Scroller, Context Menu...) have no set, and the library has no sidebar or top bar. Build them from frames, library parts and tokens, and say so. | `rules/choosing-components.md` |
 
 ## Check the data against the file
 
 Do this once per session, before giving exact values or building. Skip it for advice that needs no exact values.
 
-1. Work out the mode. The library file has pages named `↳ Button`, `↳ Colors` and so on. Any other file uses the published library, which must be enabled for that file.
+1. Work out the mode. A file with pages named `↳ Button`, `↳ Colors` and so on is the library file or a copy of it: read it directly. Each component page holds its Documentation and Examples frames, `scripts/figma/read-layout.js` reads exact layout and bindings, and `scripts/figma/read-examples.js` reads how its Examples are configured (`layout <slug>` and `example <slug>` print how to run them). Any other file uses the published library, which must be enabled for that file; it has none of those pages, and the cards and data of this skill stand in for them.
 2. Run `scripts/figma/fresh-check.js` through `use_figma` (it picks `quick` in the library file and `consumer` in another file; set `MODE_SETTING` to `full` when the answer rests on the written guidelines), save the returned JSON to a file and run `node scripts/lookup.mjs fresh compare <file>`.
 3. On `STALE`, read the changed part from the file and tell the user that the bundled data is out of date for it. Variables and collections that someone added to the file are not part of the library: a difference that comes from them is not staleness.
+4. In a file that uses the published library, a set, icon or style is imported by its key, and the data holds none: the original library file and its Community copy have different keys (`fresh compare` says so when the library name ends in "(Community)"). `node scripts/lookup.mjs keys <refs>` prints the `search_design_system` call for what you plan to use and the `GEIST_KEYS` line to fill (`componentSetKey` of a set, `componentKey` of an icon, `key` of a style, from the entry whose `libraryName` is the library of the file). Variables are found by name and need no keys.
 
 ## Working rules
 
@@ -147,7 +135,6 @@ component-docs/                         the card of each component; read it with
 data/                                   components, variables, styles, icons and motion of the file, and its fingerprint (stamp.json); read it with lookup.mjs
 rules/
 ├── figma-model.md                      how the work goes wrong: states, layer order, geometry, bindings, nested reactions, instances
-├── when-it-misbehaves.md               finding the cause when a build does not behave
 ├── choosing-components.md              which component for which need, the capacity of the sets, site components without a set
 ├── color.md                            which variable for which job
 ├── typography.md                       which text style for which job
@@ -161,7 +148,6 @@ rules/
 recipes/
 ├── build-screen.md                     frames, variables, styles, Light and Dark
 ├── configure-components.md             one instance: properties, nested parts, slots, states
-├── forms.md                            form controls
 └── interactive-overlays.md             anything that opens and closes
 scripts/
 ├── lookup.mjs                          the offline lookup; run it without arguments for every command
