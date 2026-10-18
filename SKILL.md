@@ -12,146 +12,69 @@ metadata:
 
 The Geist component library in Figma documents every component: what it is for, how it is set up, what its labels say and how it behaves. This skill carries that documentation, the library's variables and styles and the rules for using them, so an agent can advise on the library, build with it and review designs against it in any file where the library is enabled. The data, the rules and `scripts/lookup.mjs` work offline; the scripts in `scripts/figma/` run in Figma through `use_figma`.
 
-The Figma file is the source of truth: where it and this skill disagree, the file wins. The Geist site (`vercel.com/geist`) is the source of the library; a difference between the site and the file is not an error, so build from the file and mention the difference only when the user asks about the site.
-
-Answer in the user's language. Keep component, property, variable and style names exactly as they are in the file. Figma names follow the Geist site: the Figma `Button` is `<Button>`.
+The Figma file is the source of truth: where it and this skill disagree, the file wins. The Geist site (`vercel.com/geist`) is the source of the library; a difference between the site and the file is not an error, so build from the file and mention the difference only when the user asks about the site. Answer in the user's language. Keep component, property, variable and style names exactly as they are in the file; they follow the Geist site (the Figma `Button` is `<Button>`).
 
 ## How to work
 
-The designer you work for finds what you leave wrong, and finds it late: a menu that opens off the screen, a hover that sticks, a border that is not drawn. Work so that there is nothing for them to find. This is the method; the sections below hold the knowledge it uses.
+The designer you work for finds what you leave wrong, and finds it late: a menu that opens off the screen, a hover that sticks, a border that is not drawn. Work so that there is nothing to find.
 
-1. **Frame the job first.** Before you touch Figma, write down the screens; every interactive element and each of its states (rest, hover, open, disabled, error, empty, loading, Light, Dark); what sits inside what; what the user must be able to do in Present; and for every text and number the shortest, the typical and the longest value you will test with. Ask the user only what blocks you: what opens what, content you cannot invent. Say every other choice out loud as your assumption and go on: a default the user never heard is one they could not reject.
-2. **Look for what can go wrong, by class.** Read `rules/figma-model.md`. For each of its classes that applies, name the risk in this job and how you will check it. A risk with no check is a risk you accept, and the report says so.
-3. **Inspect, then use what the library already does.** Read what the file already has (existing screens, the variables and styles in use, the enabled library) and match it. Place the component, read its card (`brief <slug>`) and set its properties. Do not add a reaction, an override or a frame that the component already has; when wiring is needed, add only what the card asks for.
-4. **Build in small steps and read back.** One section per call. After each call read what you set from the file, not from your script: property values, bindings, sizes. Look at each section on its own: a reduced screenshot of the whole screen hides cut text, wrong colors and copy left at its default.
-5. **Look at every state.** Each state you listed in step 1 is looked at, not assumed. A screenshot shows one state at one moment, and a closed overlay is invisible in it: show it open (`recipes/interactive-overlays.md`, Show the open state on the canvas), look at what sticks out of it and check that it fits. Run the longest text and the empty case through the same screen. For hover and press set the variant and compare it with rest. What only a pointer can test goes on a list for the user.
-6. **Run the audit until it is clean, then review the work as the designer would.** Print it with `node scripts/lookup.mjs audit <node id>` and run it through `use_figma`. For each finding name the cause before you fix it: the wrong component, a restyled instance, a value that is not bound, wiring, layout. Fix at that cause. Three rounds of audit and fix are enough; report what remains. A clean run is evidence, not proof: it cannot hover or click. Then review the result against `rules/review-geist.md`. If you can start a sub-agent, give a fresh one only the node ids and that file and have it review the result before you hand it over; it must not see your reasoning. If you cannot, review it yourself and say in the report that the review was not independent.
-7. **Report with evidence.** Use this form; a report without the last two parts is incomplete.
-   - Built: names and ids.
-   - Evidence: the audit run (errors, warnings, what remains and why), the states you looked at, the values you read back, and for each overlay its open size and position inside its frame.
-   - Not checked, to try in Present: the exact interactions (the audit prints `toTryInPresent`).
-   - Assumed: every choice that was yours.
+1. **Frame the job.** Before you touch Figma, write down the screens, every interactive element with its states (rest, hover, open, disabled, error, empty, loading, Light, Dark), what sits inside what, what the user must do in Present, and for every text and number the shortest, typical and longest value. Ask only what blocks you; state every other choice as your assumption and go on.
+2. **Name the risks.** Read `rules/figma-model.md`. For each class that applies, name the risk in this job and how you will check it; a risk with no check goes in the report as accepted.
+3. **Inspect, then use what the library does.** Read what the file already has and match it. Place the component, read its card (`brief <slug>`), set its properties. Add a reaction, an override or a frame only when the card asks for it.
+4. **Build in small steps and read back.** One section per call; read what you set from the file, not from your script: property values, bindings, sizes. Look at each section on its own: a reduced screenshot hides cut text, wrong colors and default copy.
+5. **Look at every state.** A closed overlay is invisible in a screenshot: show it open (`recipes/interactive-overlays.md`, Show the open state on the canvas) and check that it fits. Run the longest text and the empty case through the same screen; for hover and press set the variant and compare it with rest. What only a pointer can test goes on a list for the user.
+6. **Run the audit, then review.** `node scripts/lookup.mjs audit <node id>` prints the script for `use_figma` (add `static`, `overlays` or `prototype` to print one part, for a re-check of one kind of finding). For each finding name the cause before you fix it (wrong component, restyled instance, unbound value, wiring, layout) and fix at the cause; three rounds are enough. Info findings that name a look-alike (`bare-action-icon`, `select-like`, `progress-like`, `text-suggests-component`) are hints. A clean run is evidence, not proof: it cannot hover or click. Then review against `rules/review-geist.md`; a sub-agent gets only the node ids and that file, and without one you review it yourself and say the review was not independent.
+7. **Report with evidence:** Built (names and ids); Evidence (the audit run, the states you looked at, values read back, the open size and position of each overlay inside its frame); Not checked, to try in Present (the audit prints `toTryInPresent`); Assumed (every choice that was yours). Claim nothing you did not check this turn: a screen is correct with an audit without errors and a screenshot of each state, a prototype works with bindings, variables and reactions read back, an overlay fits when its open size and position are measured.
 
-   Do not claim a check you did not run.
-
-### What counts as done
-
-No claim without evidence from this turn: before you write that something works, fits or is correct, name the evidence, produce it now, read it, and only then say it. A paraphrase of success is a claim too.
-
-| Claim | Evidence that supports it | Does not support it |
-|---|---|---|
-| The screen is correct | the audit with no errors and a screenshot of each state you listed | a screenshot of the resting state alone |
-| The prototype works | bindings, variables and reactions read back, and the list of clicks for the user | "I wired it" |
-| It works in Dark | a screenshot in Dark and the mode read from the frame | "I set the mode once" |
-| It fits | the open size and position of each overlay measured inside its frame | it looks fine at rest |
-
-When a build does not behave, find the cause before the next fix. Reproduce the fault in one named state, read the layers involved from the file, place the same library component alone in an empty frame and bring it to that state (if it behaves there, the cause is what you added), change one thing at a time on a copy, and ask the user after the third failed attempt. A second reaction, override or frame added to repair the first one is a sign the cause is not found.
+When a build does not behave, find the cause before the next fix: reproduce it in one named state, place the same component alone in an empty frame and bring it to that state (if it behaves there, the cause is what you added), change one thing at a time on a copy, and ask the user after the third failed attempt. A second reaction, override or frame added to repair the first one means the cause is not found.
 
 ## The component documentation
 
-Every component has a card with three parts. Answers go wrong where an agent skips it: a default it did not expect, a label the Content rules forbid, a property it guessed.
+Every component has a card; answers go wrong where an agent skips it. `node scripts/lookup.mjs brief <slug>` prints the public sets with every property and default, Best Practices, Assembly and Behavior in this file: what the layers of each set do (text case, which layers each property drives and where it is bound in only some variants, text without a text style, what a slot holds, the values a nested part starts with). Read it before you recommend, place or review a component.
 
-| Question | Section of the card | Command |
-|---|---|---|
-| Is this the right component, or another one? | Best Practices: When to use | `brief <slug>`, `choose <words>` |
-| How is it set up: properties, parts, slots? | Figma Guidelines: properties, Assembly | `brief <slug>`, `component <slug>` |
-| What do its title, buttons and messages say? | Best Practices: Content | `brief <slug>` |
-| How does it behave, where does focus go? | Best Practices: Behavior, Accessibility | `guide <slug> Behavior`, `guide <slug> Accessibility` |
-| Exact sizes, spacing, tokens | Figma Guidelines: Layout, Tokens | `guide <slug> Layout`, `layout <slug>` |
-| How it opens, closes and animates | Figma Guidelines: Motion, Assembly | `motion <slug>`, `guide <slug> Assembly` |
-| What the published component does in code | Behavior in Code | `guide <slug> "Behavior in Code"` |
+Sections of a card and their commands: Best Practices (when to use, behavior, content, accessibility) and Assembly in `brief <slug>`; `guide <slug> <section>` for one section (Behavior, Accessibility, Layout, Assembly, Motion, "Behavior in Code"); `layout <slug>` and `motion <slug>` for exact sizes, bindings and reactions; `choose <words>` when two components compete.
 
-Read `node scripts/lookup.mjs brief <slug>` for each component before you recommend, place or review it. It prints the public sets with every property and default, the Best Practices and the Assembly steps in one call.
+## Advise, build, review
 
-## Advise
-
-1. Find the component: `find <words>` for a need, `choose <words>` between similar ones, `rules/choosing-components.md` for the full decision tables. A need the library has no component for is in its last section.
-2. Read `brief <slug>`.
-3. Answer with the component and set, the properties to set with exact names and values, the default, one sentence of why from the card, and the Figma page from `component <slug>`. An answer without the property names and the page was written from memory. For a choice between components: the pick and the one condition that would switch it. Do not paste whole property tables unless asked.
-
-Tokens and styles are chosen the same way: `use <words>` finds the variable, text style, material or spacing for a job; the reasons are in `rules/color.md`, `typography.md`, `materials-and-elevation.md` and `spacing-and-layout.md`. Icons: `icon <words>` understands meanings such as "delete" and "settings".
-
-## Build
-
-Follow the method above. These are the tools of the build:
-
-1. Check the data against the file once per session (below).
-2. Validate the plan before you build: `node scripts/lookup.mjs check "Button: variant=error label=\"Delete Project\"" "Input > Label: value=Name"`. It rejects a set, part, property or value the library does not have, and a combination of variant properties that no variant has.
-3. Build with the recipes: `recipes/build-screen.md` (frames, variables, styles, Light and Dark), `recipes/configure-components.md` (one instance, its properties, nested parts, slots and states), `recipes/interactive-overlays.md` (anything that opens and closes). Add interactions only when asked.
-4. Audit and report as steps 6 and 7 say.
-
-Without Figma tools, answer with the exact components, properties and variables the designer should set in the Figma UI.
-
-## Review
-
-Follow `rules/review-geist.md`: run the audit on the frame (`lookup.mjs audit <node id>`) for what a script can see, take screenshots in Light and Dark and of each state, then check each component against its card (`brief <slug>`: is it the right one, set through its properties, are its labels written as its Content rules say) and the frame against the rules. Report a verdict line and a table of findings, each with the node, the problem and the exact fix.
+- **Advise.** `find <words>` for a need, `choose <words>` between similar ones, `rules/choosing-components.md` for the decision tables and the needs with no component. Answer with the component and set, the properties with exact names and values, the default, one sentence of why from the card and the page from `component <slug>`; between components, the pick and the one condition that would switch it. Tokens and styles: `use <words>` (reasons in `rules/color.md`, `typography.md`, `materials-and-elevation.md`, `spacing-and-layout.md`); icons: `icon <words>`.
+- **Build.** Check the data against the file once per session (below). Validate the plan: `node scripts/lookup.mjs check "Button: variant=error label=\"Delete Project\"" "Input > Suffix: type=kbd suffixStyling=false"`. It rejects a set, part, property or value the library does not have, a combination of variant properties no variant has, and a value of a nested part that does not exist together with the values the part starts with inside its parent. Build with `recipes/build-screen.md` (frames, variables, styles, Light and Dark), `recipes/configure-components.md` (properties, nested parts, slots, states) and `recipes/interactive-overlays.md` (anything that opens and closes). Add interactions only when asked. Without Figma tools, name the components, properties and variables to set in the Figma UI.
+- **Review.** `rules/review-geist.md`: the audit for what a script can see, screenshots in Light and Dark and of each state, each component against its card, the frame against the rules. Report a verdict line and a table of findings with node, problem and exact fix.
 
 ## Where Figma and the library differ from what you would assume
 
 | You would assume | What holds | Read |
 |---|---|---|
-| A new frame is Light | The default mode of `DS / Core Colors` is `Dark`. Set the mode on the root frame of the screen (`geistFrame` option `theme`). | `recipes/build-screen.md` (Light and Dark) |
-| A part an instance hides does not exist | Parts hidden while an instance is closed (a menu list, an overlay panel) are skipped unless `figma.skipInvisibleInstanceChildren` is `false`. The helpers and the read scripts set it. | `recipes/configure-components.md` (Slots) |
-| A frame around components is harmless | Clip content cuts the borders and rings the components draw outside their edge. `figma.createFrame()` and `figma.createAutoLayout()` turn it on; `geistFrame` leaves it off, except on a frame with an effect style, whose material border is drawn only while Clip content is on. Set `clipsContent = false` on any other frame that holds components. | `rules/materials-and-elevation.md` (Clipping) |
-| An overlay sits above what it is placed over | Later siblings draw over earlier ones: an overlay is an absolute last child, and a menu that opens downward needs canvas stacking `First on top` on the layouts above the content below it. | `recipes/interactive-overlays.md` |
-| One variable runs the prototype | One boolean per overlay. The library `state/*/open` variables are shared by every instance wired to them. `geistRewireReactions` moves the wiring of an instance to your variable. | `recipes/interactive-overlays.md` |
-| A frame around the trigger gets its click | Only when the trigger component has no click reaction of its own (Button). A component whose variants react to click (Input) takes the click itself: put On click on an absolute hit layer above it. A reaction set on a Button replaces the reactions of its master. | `recipes/interactive-overlays.md` |
-| Select an option on the item | Select on the group (`checked`, `active`). An override on an item survives later changes. | `recipes/configure-components.md` |
-| Text dropped into a slot is styled | It is your own layer, black and without a style. Create it with `geistText`. | `recipes/configure-components.md` (Slots) |
-| This skill carries the keys to import a set, icon or style | It carries none: the original library file and its Community copy have different keys. In a file that uses the published library, read them with `search_design_system`. | `recipes/build-screen.md`, step 2 |
-| Every property of a set combines with every other | Some sets lack combinations of variant properties. `brief <slug>` says which sets, and `check` rejects a combination that does not exist. | `brief <slug>`, `check` |
-| Every Geist page has a component here | Some site components (Entity, Scroller, Context Menu...) have no set, and the library has no sidebar or top bar. Build them from frames, library parts and tokens, and say so. | `rules/choosing-components.md` |
+| A new frame is Light | The default mode of `DS / Core Colors` is `Dark`; set the mode on the root frame (`geistFrame` option `theme`). | `recipes/build-screen.md` |
+| A hidden part of an instance is read | Hidden parts (a closed menu list, an overlay panel) are skipped unless `figma.skipInvisibleInstanceChildren` is `false`; the helpers and read scripts set it. | `recipes/configure-components.md` |
+| A frame around components is harmless | Clip content cuts the borders and rings they draw outside their edge. `figma.createFrame()` turns it on; `geistFrame` leaves it off except with an effect style; `geistNoClip` turns it off on your own frames. | `rules/materials-and-elevation.md` |
+| An overlay sits above what it is placed over | Later siblings draw over earlier ones: an overlay is an absolute last child, and a menu opening downward needs canvas stacking `First on top` on the layouts above the content below it. | `recipes/interactive-overlays.md` |
+| One variable runs the prototype | One boolean per overlay; the library `state/*/open` variables are shared by every instance. `geistRewireReactions` moves one instance to your variable, `geistCloneVariables` copies a `Prototyping / <Component>` collection. | `recipes/interactive-overlays.md` |
+| A frame around the trigger gets its click | Only when the trigger has no click reaction of its own (Button). A component whose variants react to click (Input) takes it: put On click on an absolute hit layer above it. A reaction set on a Button replaces those of its master. | `recipes/interactive-overlays.md` |
+| Select an option on the item | Select on the group (`checked`, `active`); an override on an item survives later changes. | `recipes/configure-components.md` |
+| Text dropped into a slot is styled | It is your own layer, black and without a style; create it with `geistText`. | `recipes/configure-components.md` |
+| This skill carries import keys | It carries none: the original file, its Community copy and files that use the copy can have different keys. Read them with `search_design_system`. | `recipes/build-screen.md` |
+| Every Geist page has a component here | Some (Entity, Scroller, Context Menu...) have no set, and there is no sidebar or top bar. Build them from frames, library parts and tokens, and say so. | `rules/choosing-components.md` |
 
 ## Check the data against the file
 
-Do this once per session, before giving exact values or building. Skip it for advice that needs no exact values.
+Once per session, before exact values or building; skip it for advice without exact values.
 
-1. Work out the mode. A file with pages named `↳ Button`, `↳ Colors` and so on is the library file or a copy of it: read it directly. Each component page holds its Documentation and Examples frames, `scripts/figma/read-layout.js` reads exact layout and bindings, and `scripts/figma/read-examples.js` reads how its Examples are configured (`layout <slug>` and `example <slug>` print how to run them). Any other file uses the published library, which must be enabled for that file; it has none of those pages, and the cards and data of this skill stand in for them.
-2. Run `scripts/figma/fresh-check.js` through `use_figma` (it picks `quick` in the library file and `consumer` in another file; set `MODE_SETTING` to `full` when the answer rests on the written guidelines), save the returned JSON to a file and run `node scripts/lookup.mjs fresh compare <file>`.
-3. On `STALE`, read the changed part from the file and tell the user that the bundled data is out of date for it. Variables and collections that someone added to the file are not part of the library: a difference that comes from them is not staleness.
-4. In a file that uses the published library, a set, icon or style is imported by its key, and the data holds none: the original library file and its Community copy have different keys (`fresh compare` says so when the library name ends in "(Community)"). `node scripts/lookup.mjs keys <refs>` prints the `search_design_system` call for what you plan to use and the `GEIST_KEYS` line to fill (`componentSetKey` of a set, `componentKey` of an icon, `key` of a style, from the entry whose `libraryName` is the library of the file). Variables are found by name and need no keys.
+1. A file with pages `↳ Button`, `↳ Colors` and so on is the library file or a copy: read it directly (`layout <slug>` and `example <slug>` print how to run `read-layout.js` and `read-examples.js`). Any other file uses the published library, which must be enabled for it, and the cards and data of this skill stand in for those pages.
+2. Run `scripts/figma/fresh-check.js` through `use_figma` (`quick` in the library file, `consumer` elsewhere; set `MODE_SETTING` to `full` when the answer rests on the written guidelines), save the JSON and run `node scripts/lookup.mjs fresh compare <file>`.
+3. On `STALE`, read the changed part from the file and tell the user the bundled data is out of date for it. Variables someone added to the file are not part of the library.
+4. In a file that uses the published library, `node scripts/lookup.mjs keys <refs>` prints the `search_design_system` call for what you plan to use and the `GEIST_KEYS` line to fill (the keys of the entry whose `libraryName` is the library of the file). Variables are found by name and need no keys.
 
 ## Working rules
 
-1. Use the library's parts. A look-alike drawn from rectangles has no states or variants and does not follow the library.
-2. Set properties, do not override. An override survives a variant change and leaves bugs that are hard to see.
-3. Bind variables, never type values; pick them by job (`rules/color.md`).
-4. Restraint: hierarchy from type, space and alignment before borders, boxes and color (`rules/spacing-and-layout.md`, `rules/review-geist.md`).
-5. One material per surface, chosen by elevation role (`rules/materials-and-elevation.md`).
-6. Design every state: empty, loading, error, disabled and Dark (`rules/review-geist.md`).
-7. Never invent a component, property or variable. State what could not be verified.
+1. Use the library's parts; a look-alike drawn from rectangles has no states or variants.
+2. Choose a component by the job it does, not by how it looks: run `find` and `choose` for every part you place or swap, also in a small edit. A dropdown that picks a date range is a date range picker; the card's When to use decides.
+3. Set properties, do not override; an override survives a variant change and leaves bugs that are hard to see.
+4. Bind variables, never type values; pick them by job (`rules/color.md`).
+5. Restraint: hierarchy from type, space and alignment before borders, boxes and color (`rules/spacing-and-layout.md`, `rules/review-geist.md`).
+6. One material per surface, chosen by elevation role (`rules/materials-and-elevation.md`).
+7. Design every state: empty, loading, error, disabled and Dark.
+8. Never invent a component, property or variable; state what could not be verified.
 
-## Ask or say, do not guess
+When the component is not in the library, say so and compose it from library parts and tokens. When a size, timing or binding is not in the data, read it from the file (`layout`, `motion`) or say it is unverified. When a prototype does not say what opens or closes, ask, or build the one flow that is clear and name what you left out. When the library is not enabled in the file, ask the user to enable it before building.
 
-- The component is not in the library: say so and compose it from library parts and tokens. Do not draw a look-alike of a library component.
-- A size, timing or binding is not in the data: read it from the file (`layout`, `motion`) or state that it is unverified.
-- A prototype is requested without saying what should open or close: ask, or build the one flow that is clear and name what you left out.
-- The file does not have the library enabled: ask the user to enable it (Assets, Libraries) before building.
-
-## Files
-
-```
-component-docs/                         the card of each component; read it with brief and guide
-data/                                   components, variables, styles, icons and motion of the file, and its fingerprint (stamp.json); read it with lookup.mjs
-rules/
-├── figma-model.md                      how the work goes wrong: states, layer order, geometry, bindings, nested reactions, instances
-├── choosing-components.md              which component for which need, the capacity of the sets, site components without a set
-├── color.md                            which variable for which job
-├── typography.md                       which text style for which job
-├── materials-and-elevation.md          which material for which surface, and clipping
-├── spacing-and-layout.md               spacing, radius, page widths and grids
-├── content-and-copy.md                 labels and messages
-├── accessibility-and-interaction.md    focus, targets and states
-├── motion-and-prototyping.md           motion and prototype reactions
-├── review-geist.md                     the review procedure and report
-└── sources.md                          where every fact comes from
-recipes/
-├── build-screen.md                     frames, variables, styles, Light and Dark
-├── configure-components.md             one instance: properties, nested parts, slots, states
-└── interactive-overlays.md             anything that opens and closes
-scripts/
-├── lookup.mjs                          the offline lookup; run it without arguments for every command
-└── figma/                              scripts for use_figma: helpers.js (print what a script needs with lookup.mjs helpers <names>), audit.js, fresh-check.js, read-examples.js, read-layout.js
-```
-
-`node scripts/lookup.mjs rule [name] [section]` prints a rule file or one of its sections. Read the one file the task needs.
+`node scripts/lookup.mjs rule [name] [section]` prints a rule file or one of its sections; run `lookup.mjs` without arguments for every command and `lookup.mjs helpers` for the helpers of `scripts/figma/helpers.js`. Read the one file the task needs.

@@ -84,13 +84,14 @@ Contents: Best Practices, When to use, Behavior, Content, Figma Guidelines, Anat
 ### Layout
 
 - Header cells are 36px tall. Body cells add 10px above and below, 5px when compact; side padding is 8px.
-- Text is Geist 14px on a 20px line; head and footer cells are Medium, body cells Regular.
+- Cell text sets font, size and line height directly: Geist 14px on a 20px line, Medium in head and footer, Regular in body.
 - A 12px gap separates the header from the body.
 - A 1px border closes the header and opens the footer.
 - Each bordered row is 1px taller.
 - Stripe and hover fills have 6px rounded corners.
 - Cells split the row width equally.
 - Cells keep equal widths on resize; long text ends in an ellipsis and other content is clipped.
+- `Table` clips its content, so a menu that opens from a cell is cut at the table edge.
 - The Show More button sits centered over a 128px fade at the bottom of the body.
 
 ### Motion

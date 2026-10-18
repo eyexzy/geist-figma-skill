@@ -64,6 +64,19 @@ async function geistSetProps(inst, props) {
     if (def.type === 'VARIANT' && !def.variantOptions.includes(String(value))) throw new Error(`"${name}" of "${set.name}" accepts ${def.variantOptions.join(' | ')}, got "${value}"`);
     todo[key] = def.type === 'INSTANCE_SWAP' && typeof value === 'string' ? (await geistIcon(value)).id : def.type === 'VARIANT' ? String(value) : value;
   }
+  if (set.type === 'COMPONENT_SET') {
+    const now = {};
+    for (const [k, v] of Object.entries(inst.componentProperties)) if (v.type === 'VARIANT') now[k.split('#')[0]] = v.value;
+    const next = { ...now };
+    const asked = [];
+    for (const [name, value] of Object.entries(props)) if (defs[byName[name]].type === 'VARIANT') { next[name] = String(value); asked.push([name, String(value)]); }
+    const rows = set.children.map(c => Object.fromEntries(c.name.split(', ').map(kv => kv.split('='))));
+    if (asked.length && !rows.some(r => Object.entries(next).every(([k, v]) => r[k] === v))) {
+      const show = o => Object.entries(o).map(([k, v]) => k + '=' + v).join(', ');
+      const near = rows.filter(r => asked.every(([k, v]) => r[k] === v)).slice(0, 6).map(show).join(' | ');
+      throw new Error(`No variant of "${set.name}" has ${show(next)}. The variant properties you did not set keep their current values (${show(now)}). Variants with ${asked.map(([k, v]) => k + '=' + v).join(', ')}: ${near || 'none'}. Set the properties that go with them too.`);
+    }
+  }
   inst.setProperties(todo);
   return inst;
 }
@@ -136,10 +149,11 @@ async function geistFill(node, varName) {
 }
 
 // Stroke bound to a color variable.
-async function geistStroke(node, varName, weight = 1) {
+async function geistStroke(node, varName, weight = 1, sides) {
   const v = await geistVar(varName);
   node.strokes = [figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }, 'color', v)];
   node.strokeWeight = weight;
+  if (sides) for (const s of ['Top', 'Right', 'Bottom', 'Left']) node['stroke' + s + 'Weight'] = sides.includes(s.toLowerCase()) ? weight : 0;
 }
 
 // Number variable on a field: 'cornerRadius' (all corners), 'itemSpacing', 'paddingLeft' and so on.
@@ -213,7 +227,8 @@ async function geistFrame(name, o = {}) {
   await space('paddingLeft', o.padX ?? o.pad);
   await space('paddingRight', o.padX ?? o.pad);
   if (o.fill) await geistFill(f, o.fill);
-  if (o.stroke) await geistStroke(f, o.stroke);
+  if (o.stroke) await geistStroke(f, o.stroke, o.strokeWeight || 1, o.strokeSides);
+  if (o.strokeInLayout === false) f.strokesIncludedInLayout = false;
   if (o.radius !== undefined) {
     const r = typeof o.radius === 'number' ? geistRadius[o.radius] : o.radius;
     if (!r) throw new Error(`Radius ${o.radius} is not on the ladder: ${Object.keys(geistRadius).join(', ')}`);
@@ -228,6 +243,18 @@ async function geistFrame(name, o = {}) {
     if (o.h === 'fill') f.layoutSizingVertical = 'FILL';
   }
   return f;
+}
+
+// Turn Clip content off on the frames under a node that are yours, so the borders and rings of components at their edge are not cut. It does not enter instances or components (a library component clips on purpose), and it skips frames that carry an effect style (a material border is drawn only while Clip content is on), scroll areas (overflow direction set) and frames named in keep. Returns the frames it changed, as 'id name'.
+function geistNoClip(root, keep = []) {
+  const changed = [];
+  const walk = n => {
+    if (n.type === 'INSTANCE' || n.type === 'COMPONENT' || n.type === 'COMPONENT_SET') return;
+    if (n.type === 'FRAME' && n.clipsContent && !n.effectStyleId && (!n.overflowDirection || n.overflowDirection === 'NONE') && !keep.includes(n.name)) { n.clipsContent = false; changed.push(n.id + ' ' + n.name); }
+    if ('children' in n) n.children.forEach(walk);
+  };
+  walk(root);
+  return changed;
 }
 
 // Text layer with a library text style and a bound color. Options: style, color, w ('fill' wraps text to the parent width), align.
@@ -315,29 +342,31 @@ async function geistOnHoverShow(trigger, varName, collection) {
   await trigger.setReactionsAsync(reactions);
 }
 
-// Point every variable action under a node, inside instances too, from one variable to another. Use it when a library overlay is wired to a shared variable (Backdrop, Panel, the buttons that close it) and your screen needs its own.
-// Overlay reactions exist only in the open variant: set the open property to true before the call and bind it to the variable after. Returns the number of layers changed.
-async function geistRewireReactions(root, fromName, toName, fromCollection, toCollection) {
-  const from = await geistVar(fromName, fromCollection);
-  const to = await geistVar(toName, toCollection);
-  const swap = a => {
-    if (!a || a.type !== 'SET_VARIABLE') return a;
-    const next = { ...a };
-    if (a.variableId === from.id) next.variableId = to.id;
-    const value = a.variableValue && a.variableValue.value;
-    if (value && value.expressionArguments) {
-      const args = value.expressionArguments.map(x => (x.value && x.value.id === from.id ? { ...x, value: { ...x.value, id: to.id } } : x));
-      next.variableValue = { ...a.variableValue, value: { ...value, expressionArguments: args } };
-    }
-    return next;
-  };
+// Copy of a reaction value with variable ids replaced (idMap: old id to new id) and string values replaced (texts: { old: new }). Walks actions, conditional blocks, conditions and expressions.
+function geistRemapReaction(x, idMap, texts) {
+  if (Array.isArray(x)) return x.map(y => geistRemapReaction(y, idMap, texts));
+  if (!x || typeof x !== 'object') return x;
+  const o = {};
+  for (const k of Object.keys(x)) o[k] = (k === 'variableId' || (k === 'id' && x.type === 'VARIABLE_ALIAS')) && idMap.has(x[k]) ? idMap.get(x[k]) : geistRemapReaction(x[k], idMap, texts);
+  if (texts && x.type === 'STRING' && typeof x.value === 'string' && Object.prototype.hasOwnProperty.call(texts, x.value)) o.value = texts[x.value];
+  return o;
+}
+
+// Point every variable action under a node, inside instances and conditional blocks too, from one variable to another. Use it when a library overlay is wired to a shared variable (Backdrop, Panel, the buttons that close it) and your screen needs its own.
+// fromName and toName can be lists of the same length: every pair is replaced in one pass, so two variables can trade places (['item/3/selected', 'item/4/selected'] to ['item/4/selected', 'item/3/selected']).
+// texts replaces string values in those reactions ({ 'All items selected': 'All regions selected' }). Overlay reactions exist only in the open variant: set the open property to true before the call and bind it to the variable after. Returns the number of layers changed.
+async function geistRewireReactions(root, fromName, toName, fromCollection, toCollection, texts) {
+  const fromNames = [].concat(fromName), toNames = [].concat(toName);
+  if (fromNames.length !== toNames.length) throw new Error('fromName and toName need the same number of variables.');
+  const idMap = new Map();
+  for (let i = 0; i < fromNames.length; i++) idMap.set((await geistVar(fromNames[i], fromCollection)).id, (await geistVar(toNames[i], toCollection)).id);
   const nodes = [];
   const walk = n => { nodes.push(n); if ('children' in n) n.children.forEach(walk); };
   walk(root);
   let changed = 0;
   for (const n of nodes) {
     if (!('reactions' in n) || !n.reactions.length) continue;
-    const refers = a => a && a.type === 'SET_VARIABLE' && (a.variableId === from.id || ((a.variableValue && a.variableValue.value && a.variableValue.value.expressionArguments) || []).some(x => x.value && x.value.id === from.id));
+    const refers = a => a && (a.type === 'SET_VARIABLE' || a.type === 'CONDITIONAL') && [...idMap.keys()].some(id => JSON.stringify(a).includes(id));
     const uses = n.reactions.some(r => (r.actions || (r.action ? [r.action] : [])).some(refers));
     if (!uses) continue;
     // The master also switches the instance to the closed variant (Change to) where it sets the variable. Once the open property is bound to the variable, the variable switches it, so the library's Examples keep the variable action only.
@@ -345,7 +374,7 @@ async function geistRewireReactions(root, fromName, toName, fromCollection, toCo
       const { action, ...rest } = r;
       const acts = r.actions || (action ? [action] : []);
       const own = acts.some(refers) ? acts.filter(a => !(a.type === 'NODE' && a.navigation === 'CHANGE_TO')) : acts;
-      return { ...rest, actions: own.map(swap) };
+      return { ...rest, actions: own.map(a => geistRemapReaction(a, idMap, texts)) };
     });
     await n.setReactionsAsync(next);
     // The first call on an instance layer keeps the reaction inherited from the main component next to yours; a second call leaves yours only.
@@ -353,4 +382,59 @@ async function geistRewireReactions(root, fromName, toName, fromCollection, toCo
     changed++;
   }
   return changed;
+}
+
+// Copy a library collection of prototype variables (Prototyping / Multi Select) into a collection of yours and point everything under root at the copies: reactions (conditions and expressions too), layers bound to a variable and component properties bound to one.
+// values sets start values by variable name ({ 'selection/row-count': 4 }); texts replaces string values in the reactions ({ 'All items selected': 'All regions selected' }). Returns { variables, reactions, layers, props }, the copies by name and the counts of what was pointed at them.
+// Reactions that stay in the library variant (a component's own master) are not touched: they live in the main component, so the copies take effect through the instance layers of root only.
+async function geistCloneVariables(fromCollection, toCollection, root, values = {}, texts) {
+  const cols = await figma.variables.getLocalVariableCollectionsAsync();
+  const src = [];
+  const localFrom = cols.find(c => c.name === fromCollection);
+  if (localFrom) for (const id of localFrom.variableIds) src.push(await figma.variables.getVariableByIdAsync(id));
+  else {
+    const lib = (await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync()).find(c => c.name === fromCollection);
+    if (!lib) throw new Error(`Collection "${fromCollection}" not found. In a file that uses the library, the library must be enabled for the file.`);
+    for (const v of await figma.teamLibrary.getVariablesInLibraryCollectionAsync(lib.key)) src.push(await figma.variables.importVariableByKeyAsync(v.key));
+  }
+  let col = cols.find(c => c.name === toCollection);
+  if (!col) col = figma.variables.createVariableCollection(toCollection);
+  const have = new Map((await figma.variables.getLocalVariablesAsync()).filter(v => v.variableCollectionId === col.id).map(v => [v.name, v]));
+  const copies = {}, idMap = new Map();
+  for (const s of src) {
+    let c = have.get(s.name);
+    if (!c) {
+      c = figma.variables.createVariable(s.name, col, s.resolvedType);
+      c.setValueForMode(col.defaultModeId, Object.prototype.hasOwnProperty.call(values, s.name) ? values[s.name] : Object.values(s.valuesByMode)[0]);
+      c.scopes = s.scopes;
+      c.description = s.description || '';
+    } else if (Object.prototype.hasOwnProperty.call(values, s.name)) c.setValueForMode(col.defaultModeId, values[s.name]);
+    copies[s.name] = c;
+    idMap.set(s.id, c.id);
+  }
+  geistCache.local = null;
+  geistCache.vars.clear();
+  const nodes = [];
+  const walk = n => { nodes.push(n); if ('children' in n) n.children.forEach(walk); };
+  walk(root);
+  const count = { reactions: 0, layers: 0, props: 0 };
+  const touches = x => { const s = JSON.stringify(x); return [...idMap.keys()].some(id => s.includes(id)); };
+  for (const n of nodes) {
+    if ('reactions' in n && n.reactions.length && touches(n.reactions)) {
+      const next = geistRemapReaction(n.reactions, idMap, texts);
+      await n.setReactionsAsync(next);
+      if (n.reactions.length > next.length) await n.setReactionsAsync(next);
+      count.reactions++;
+    }
+    for (const [field, alias] of Object.entries(n.boundVariables || {})) {
+      if (alias && !Array.isArray(alias) && idMap.has(alias.id)) { n.setBoundVariable(field, await figma.variables.getVariableByIdAsync(idMap.get(alias.id))); count.layers++; }
+    }
+    if (n.type === 'INSTANCE') {
+      for (const [key, p] of Object.entries(n.componentProperties)) {
+        const alias = p.boundVariables && p.boundVariables.value;
+        if (alias && idMap.has(alias.id)) { n.setProperties({ [key]: { type: 'VARIABLE_ALIAS', id: idMap.get(alias.id) } }); count.props++; }
+      }
+    }
+  }
+  return { variables: copies, ...count };
 }

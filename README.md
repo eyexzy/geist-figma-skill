@@ -81,27 +81,28 @@ On top of the knowledge sits a method. A designer finds what an agent leaves wro
 
 ### The audit
 
-`scripts/figma/audit.js` reads a frame, a section or an instance and changes nothing. It reports on three levels (errors, warnings, info) in six groups:
+`scripts/figma/audit.js` reads a frame, a section or an instance and changes nothing. It reports on three levels (errors, warnings, info) in seven groups:
 
 | Group | What it finds |
 |---|---|
 | Values | hex fills and strokes, legacy variables, text without a library style, text on a background step, contrast below WCAG 2 in the mode of the node, radius and spacing off the steps, shadows without an effect style |
 | Geometry | positions on a fraction of a pixel, layers beyond their screen, Clip content that cuts a child or a material border, text collapsed to a sliver |
 | Overlays | an overlay that opens outside the screen, under later layers or cut by a clipping parent, even while a variable hides it |
-| Instances | a missing main component, a look-alike frame, parts restyled by hand, a hover replaced by reactions on the instance, copy left at its default |
+| Instances | a missing main component, a look-alike frame, parts restyled by hand, size or visibility of a part set by hand, a hover replaced by reactions on the instance, copy left at its default |
+| Look-alikes | hints, not verdicts: a bare action icon, a frame with text and a chevron, a thin bar inside a bar, a Button or Select whose text names another component |
 | Prototype | a variable set to true and never to false, a variable shared by several overlays, hover inside hover, a click that the wrapped component takes before the layer around it, a clickable layer under 24 px |
 | Theme | the mode of `DS / Core Colors` on every screen |
 
-It also prints `toTryInPresent`, the interactions of the design that only a pointer can test.
+It also prints `toTryInPresent`, the interactions of the design that only a pointer can test. The audit can be printed in parts (`static`, `overlays`, `prototype`) to re-check one kind of finding with less code.
 
 ## What is inside
 
 | Folder | Contents |
 |---|---|
 | [`component-docs/`](component-docs) | The card of each component: when to use it, properties and defaults, nested parts and slots, labels and messages, behavior, accessibility, layout values and motion. The same text as the documentation frames of the Figma file. |
-| [`data/`](data) | Component sets with their properties, variables with their values in Light and Dark, text and effect styles, icons with search synonyms, prototype reactions and the fingerprint of the file the data was read from. |
+| [`data/`](data) | Component sets with their properties, variables with their values in Light and Dark, text and effect styles, icons with search synonyms, prototype reactions, what the layers of each set do and the fingerprint of the file the data was read from. |
 | [`rules/`](rules) | Which component for which need, which color, text style, material, spacing and motion for which job, copy, accessibility, the models of Figma behavior and the review procedure. |
-| [`recipes/`](recipes) | Building a screen, configuring an instance, forms, and overlays that open and close in a prototype. |
+| [`recipes/`](recipes) | Building a screen, configuring an instance with its nested parts and slots, and overlays that open and close in a prototype. |
 | [`scripts/`](scripts) | `lookup.mjs`, an offline search of all of the above, and `figma/`, the scripts the agent runs through `use_figma`: helpers, the audit, the freshness check. |
 
 ### Lookup
@@ -111,12 +112,12 @@ It also prints `toTryInPresent`, the interactions of the design that only a poin
 | Command | Prints |
 |---|---|
 | `find <words>`, `choose <words>`, `list` | components for a need, the pick between similar ones, all components by category |
-| `brief <slug>`, `component <slug>` | what a component is for and how it is set up: public sets, properties, defaults, Best Practices, assembly |
+| `brief <slug>`, `component <slug>` | what a component is for and how it is set up: public sets, properties, defaults, Best Practices, assembly, and what its layers do in the file (text case, layers each property drives, text without a style, slot contents, the values a nested part starts with) |
 | `guide <slug> [section]`, `layout <slug>`, `motion <slug>` | written guidelines, exact layout and bindings, reactions with time and curve |
 | `use <words>`, `token <words>`, `ramp <hue>`, `style <words>`, `collections` | the variable, text style, material or spacing for a job |
 | `icon <words>` | icon names by meaning ("delete", "settings") |
-| `check "<Set>: k=v ..."` | validates a plan before building: set, part, property and value |
-| `audit <node id>`, `helpers [names]` | the audit and the helper functions, ready to paste into `use_figma` |
+| `check "<Set>: k=v ..."` | validates a plan before building: set, part, property and value, and the values a nested part keeps inside its parent |
+| `audit <node id> [parts]`, `helpers [names]` | the audit and the helper functions, ready to paste into `use_figma` |
 | `keys <refs>`, `keys from <file>`, `fresh [compare <file>]` | the search to run and the `GEIST_KEYS` to fill for a file that uses the published library, the freshness stamp |
 | `rule [name] [section]`, `example <slug>` | a rule file or one section, how the Examples of a component are set up |
 
@@ -126,7 +127,7 @@ It also prints `toTryInPresent`, the interactions of the design that only a poin
 geist-figma-skill/
 ├── SKILL.md            instructions for the agent
 ├── component-docs/     documentation of each component
-├── data/               components, variables, styles, icons, motion and the fingerprint of the file
+├── data/               components, variables, styles, icons, motion, what each set's layers do and the fingerprint of the file
 ├── rules/              components and tokens, copy, accessibility, motion, how work goes wrong, review
 ├── recipes/            build procedures
 └── scripts/            lookup.mjs and the scripts for use_figma

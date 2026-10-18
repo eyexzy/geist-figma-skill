@@ -10,8 +10,9 @@ const RADIUS_STEPS = new Set([0, 1, 2, 4, 5, 6, 8, 10, 12, 14, 16, 24, 9999]);
 const GEIST_FONTS = new Set(['Geist', 'Geist Mono']);
 const RING = 4;
 const DEFAULT_TEXT = /^(Label|Value|Text|Title|Heading|Description|Placeholder|Item \d+|Lorem ipsum.*|Button|Name)$/;
-const DEFAULT_NAME = /^(Frame|Rectangle|Group|Ellipse|Line|Vector|Text|Section|Polygon|Star) ?\d*$/;
-const APPEARANCE = new Set(['fills', 'strokes', 'effects', 'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'strokeWeight', 'fillStyleId', 'strokeStyleId', 'effectStyleId', 'textStyleId', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing']);
+const ACTION_ICON = /^(Trash|Delete|Plus|Minus|Cross|Close|Copy|Edit|Pencil|Download|Upload|Share|Search|Refresh|Settings|More|Dots|Filter|Sort|Check)/i;
+const DEFAULT_NAME =/^(Frame|Rectangle|Group|Ellipse|Line|Vector|Text|Section|Polygon|Star) ?\d*$/;
+const APPEARANCE = new Set(['fills', 'strokes', 'effects', 'cornerRadius', 'topLeftRadius', 'topRightRadius', 'bottomLeftRadius', 'bottomRightRadius', 'strokeWeight', 'fillStyleId', 'strokeStyleId', 'effectStyleId', 'textStyleId', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'clipsContent']);
 // Sets whose property active, open or show opens an overlay over the screen (the same property selects a tab in Tabs and Switch).
 const OVERLAY_SETS = new Set(['Modal', 'Command Menu', 'Sheet', 'Drawer']);
 // Names of the library's public component sets.
@@ -21,6 +22,8 @@ const root = await figma.getNodeByIdAsync(ROOT_ID);
 if (!root || !('children' in root || root.type === 'INSTANCE')) throw new Error('ROOT_ID must be a frame, group, section or instance');
 
 const R = {};
+const toTry = [];
+let theme = null;
 const flag = (id, sev, what, n, extra) => {
   const c = R[id] || (R[id] = { sev, what, count: 0, examples: [] });
   c.count++;
@@ -38,6 +41,9 @@ const isDriver = async id => {
   driverCache.set(id, r);
   return r;
 };
+// A frame with a scroll direction shows part of its content on purpose: what lies beyond its edge is reached by scrolling.
+const scrolls = n => !!(n.overflowDirection && n.overflowDirection !== 'NONE');
+const inScroll = n => { for (let p = n.parent; p && p.type !== 'PAGE'; p = p.parent) if (scrolls(p)) return true; return false; };
 const inFlow = n => !!(n.parent && n.parent.layoutMode && n.parent.layoutMode !== 'NONE' && n.layoutPositioning !== 'ABSOLUTE');
 const setNameOf = async inst => { const m = await inst.getMainComponentAsync(); return m ? (m.parent && m.parent.type === 'COMPONENT_SET' ? m.parent.name : m.name) : ''; };
 const hex = c => '#' + [c.r, c.g, c.b].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
@@ -72,6 +78,7 @@ const resolveColor = async (consumer, paint) => {
 };
 const lum = c => { const f = x => (x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)); return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
 
+// @part static
 for (const { n, own, inside, ancVis } of all) {
   const vis = ancVis && n.visible !== false;
   if (n.visible === false && own && ancVis) flag('hidden-layer', 'info', 'hidden layers left in the design', n);
@@ -79,7 +86,7 @@ for (const { n, own, inside, ancVis } of all) {
   const b = n.absoluteBoundingBox;
 
   // Geometry
-  if (!inside && (vis || (ancVis && b && Math.min(b.width, b.height) >= 100)) && b && ['FRAME', 'INSTANCE', 'RECTANGLE', 'LINE', 'COMPONENT'].includes(n.type) && (n.type === 'LINE' || Math.min(b.width, b.height) >= 6)) {
+  if (!inside && vis && b && ['FRAME', 'INSTANCE', 'RECTANGLE', 'LINE', 'COMPONENT'].includes(n.type) && (n.type === 'LINE' || Math.min(b.width, b.height) >= 6)) {
     const p = n.parent && n.parent.absoluteBoundingBox;
     const originFrac = (frac(b.x) || frac(b.y)) && !(p && (frac(p.x) || frac(p.y)));
     const sizeFrac = (frac(b.width) || frac(b.height)) && !(p && (frac(p.width) || frac(p.height)));
@@ -87,7 +94,7 @@ for (const { n, own, inside, ancVis } of all) {
   }
   if (own && vis && b && screens.length) {
     const S = screenOf(n).absoluteBoundingBox;
-    if (n !== screenOf(n) && S && (b.x < S.x - 0.5 || b.y < S.y - 0.5 || b.x + b.width > S.x + S.width + 0.5 || b.y + b.height > S.y + S.height + 0.5) && n.layoutPositioning !== 'ABSOLUTE') flag('beyond-screen', 'warn', 'a visible layer reaches beyond its screen frame', n);
+    if (n !== screenOf(n) && S && (b.x < S.x - 0.5 || b.y < S.y - 0.5 || b.x + b.width > S.x + S.width + 0.5 || b.y + b.height > S.y + S.height + 0.5) && n.layoutPositioning !== 'ABSOLUTE' && !inScroll(n)) flag('beyond-screen', 'warn', 'a visible layer reaches beyond its screen frame', n);
   }
 
   if (!own) {
@@ -99,6 +106,24 @@ for (const { n, own, inside, ancVis } of all) {
   // Own layers
   if (['FRAME', 'RECTANGLE', 'GROUP', 'ELLIPSE', 'LINE', 'VECTOR', 'POLYGON', 'STAR'].includes(n.type) && DEFAULT_NAME.test(n.name)) flag('default-name', 'info', 'layers with a default name', n);
   if (n.type === 'FRAME' && n.children.length === 0 && !/spacer|divider|gap/i.test(n.name) && !hasFill(n) && !(Array.isArray(n.strokes) && n.strokes.length) && !(n.effects && n.effects.length)) flag('empty-frame', 'info', 'empty frames', n);
+  // Look-alikes of library components, as hints only: the audit cannot know what the layer is for.
+  if (n.type === 'INSTANCE' && vis && b && b.width <= 32 && Math.abs(b.width - b.height) < 1 && n.parent && n.parent.type !== 'INSTANCE') {
+    const mc = await n.getMainComponentAsync();
+    if (mc && mc.parent && mc.parent.type !== 'COMPONENT_SET') {
+      const clicks = n.reactions && n.reactions.some(r => r.trigger && r.trigger.type === 'ON_CLICK');
+      if (clicks || ACTION_ICON.test(mc.name)) flag('bare-action-icon', 'info', 'an icon instance outside a component, named like an action or with a click: Button has shape square and circle for icon-only controls', n, mc.name + (clicks ? ' | has a click' : ''));
+    }
+  }
+  if (n.type === 'FRAME' && vis && n.layoutMode === 'HORIZONTAL' && b && b.height >= 28 && b.height <= 48 && (hasFill(n) || (Array.isArray(n.strokes) && n.strokes.length) || (n.effects && n.effects.length))) {
+    const kids = n.children.filter(c => c.visible !== false);
+    let chevron = false;
+    for (const c of kids) if (c.type === 'INSTANCE') { const mc = await c.getMainComponentAsync(); if (mc && /chevron|caret|expand/i.test(mc.name)) chevron = true; }
+    if (chevron && kids.some(c => c.type === 'TEXT')) flag('select-like', 'info', 'a frame with text and a chevron: Select, Combobox and Menu are the library components that pick a value from a list', n);
+  }
+  if (n.type === 'FRAME' && vis && b && b.height <= 12 && b.width >= 40) {
+    const bars = n.children.filter(c => c.visible !== false && (c.type === 'RECTANGLE' || c.type === 'FRAME'));
+    if (bars.length >= 1 && bars.length <= 2 && bars.some(c => c.width < n.width - 1 && Math.abs(c.height - n.height) < 1.5)) flag('progress-like', 'info', 'a thin bar with a shorter bar inside: Progress and Gauge are the library components that show a value', n);
+  }
   if ((n.type === 'FRAME' || n.type === 'INSTANCE') && n.opacity < 1 && vis) flag('layer-opacity', 'warn', 'a frame or instance dimmed with opacity (a disabled look is a property of the component)', n, String(n.opacity));
   if (n.type === 'INSTANCE') {
     const mc = await n.getMainComponentAsync();
@@ -106,7 +131,11 @@ for (const { n, own, inside, ancVis } of all) {
     if (n.overrides && vis) {
       for (const o of n.overrides) {
         const fields = (o.overriddenFields || []).filter(f => APPEARANCE.has(f));
-        if (fields.length) { const t = await figma.getNodeByIdAsync(o.id); flag('restyled-instance', 'warn', 'a part of a library instance restyled by hand instead of through its properties', n, (t ? t.name : o.id) + ': ' + fields.join(', ')); }
+        if (o.id !== n.id) {
+          const lay = (o.overriddenFields || []).filter(f => ['visible', 'width', 'height', 'layoutSizingHorizontal', 'layoutSizingVertical', 'layoutPositioning', 'constraints'].includes(f));
+          if (lay.length) { const t = await figma.getNodeByIdAsync(o.id); const bindsVisible = t && ((t.componentPropertyReferences && t.componentPropertyReferences.visible) || (t.boundVariables && t.boundVariables.visible)); if (t && !(lay.length === 1 && lay[0] === 'visible' && bindsVisible)) flag('inner-layout-override', 'info', 'a layer inside a library instance has its size, position or visibility set by hand; a property of the component is the way the library expects it to change', n, t.name + ': ' + lay.join(', ')); }
+        }
+        if (fields.length) { const t = await figma.getNodeByIdAsync(o.id); flag('restyled-instance', 'warn', 'a part of a library instance restyled by hand instead of through its properties (an icon swapped through a property also records a fills override on its vector: that one is not a restyle)', n, (t ? t.name : o.id) + ': ' + fields.join(', ')); }
       }
     }
     if (mc && n.reactions.length && vis) {
@@ -117,8 +146,16 @@ for (const { n, own, inside, ancVis } of all) {
         if (!holds) flag('hover-lost', 'error', 'reactions set on the instance replaced the hover of its component', n);
       }
     }
+    const nm = await setNameOf(n);
+    if (vis && (nm === 'Button' || nm === 'Select')) {
+      const lt = n.findOne(x => x.type === 'TEXT' && x.visible !== false);
+      const label = lt ? lt.characters.trim() : '';
+      if (nm === 'Button' && /^(give |send )?feedback$/i.test(label)) flag('text-suggests-component', 'info', 'a Button labelled Feedback: Feedback is the library component that asks for an opinion', n, label);
+      if (nm === 'Select' && /^(last \d+ \w+|today|yesterday|this (week|month|year)|custom range|date range|time range)$/i.test(label)) flag('text-suggests-component', 'info', 'a Select showing a period: Calendar (with presets) is the library component that picks a date or a range', n, label);
+      if (nm === 'Button' && /^(previous|next)$/i.test(label)) flag('text-suggests-component', 'info', 'a Button labelled Previous or Next: Pagination is the library component for neighbouring pages', n, label);
+    }
     const ps = n.componentProperties || {};
-    const overlaySet = OVERLAY_SETS.has(await setNameOf(n));
+    const overlaySet = OVERLAY_SETS.has(nm);
     for (const [k, v] of Object.entries(ps)) {
       if (!overlaySet || !/^(active|open|show|visible)(#|$)/.test(k) || !(v.boundVariables && v.boundVariables.value)) continue;
       const sibs = n.parent ? n.parent.children : [];
@@ -138,7 +175,7 @@ for (const { n, own, inside, ancVis } of all) {
       }
     } else if (n.type === 'FRAME' && n.children.filter(c => c.layoutPositioning !== 'ABSOLUTE').length > 1) flag('no-auto-layout', 'warn', 'a frame with several children and no auto layout', n);
     if (libNames.has(n.name) && n.type === 'FRAME') flag('lookalike', 'warn', 'a frame named like a library component but not an instance', n);
-    if (n.type === 'FRAME' && n.clipsContent && vis) {
+    if (n.type === 'FRAME' && n.clipsContent && vis && !scrolls(n)) {
       const close = n.children.filter(c => c.visible !== false && c.type === 'INSTANCE' && c.layoutPositioning !== 'ABSOLUTE' && (c.x < RING || c.y < RING || c.x + c.width > n.width - RING || c.y + c.height > n.height - RING));
       if (close.length) flag('clip-ring', 'warn', 'Clip content is on and a component sits within 4px of the edge: its border or ring is cut', n, close[0].name);
       const cut = b && n.children.filter(c => { const cb = c.absoluteBoundingBox; return c.visible !== false && c.layoutPositioning !== 'ABSOLUTE' && cb && (cb.x < b.x - 0.5 || cb.y < b.y - 0.5 || cb.x + cb.width > b.x + b.width + 0.5 || cb.y + cb.height > b.y + b.height + 0.5); });
@@ -162,7 +199,7 @@ for (const { n, own, inside, ancVis } of all) {
     counts.text++;
     const segs = n.getStyledTextSegments(['textStyleId', 'fontName', 'fills', 'fontSize', 'fontWeight']);
     if (segs.some(s => !s.textStyleId)) {
-      if (n.id.includes(';')) flag('text-no-style-in-instance', 'warn', 'text without a library text style inside a library instance: often the default text of the component or of its slot', n, n.characters.slice(0, 30));
+      if (n.id.includes(';')) flag('text-no-style-in-instance', 'info', 'text without a library text style inside a library instance: most are the default texts of the library, which set their font directly (brief <slug> lists them under Behavior in this file); check the ones you wrote into a slot', n, n.characters.slice(0, 30));
       else flag('text-no-style', 'error', 'text without a library text style', n, n.characters.slice(0, 30));
     }
     for (const s of segs) if (!GEIST_FONTS.has(s.fontName.family)) { flag('font', 'error', 'font that is not Geist', n, s.fontName.family + ' ' + s.fontName.style); break; }
@@ -193,15 +230,17 @@ for (const { n, own, inside, ancVis } of all) {
   }
 }
 
+// @end
+// @part overlays
 // Overlays: layers shown by a variable and hidden now. Their open geometry is known while hidden.
 for (const { n, own, ancVis } of all) {
   if (n.visible !== false || !ancVis || !(n.boundVariables && n.boundVariables.visible) || !['INSTANCE', 'FRAME'].includes(n.type)) continue;
   if (inFlow(n) || !(await isDriver(n.boundVariables.visible.id))) continue;
   const B = n.absoluteBoundingBox; if (!B) continue;
   const scr = screenOf(n), S = scr.absoluteBoundingBox;
-  if (S && (B.x < S.x - 0.5 || B.y < S.y - 0.5 || B.x + B.width > S.x + S.width + 0.5 || B.y + B.height > S.y + S.height + 0.5)) flag('overlay-outside-screen', 'error', 'an overlay opens outside the screen frame (use the other side, or leave room)', n, 'by ' + Math.round(Math.max(S.y - B.y, B.y + B.height - S.y - S.height, S.x - B.x, B.x + B.width - S.x - S.width)) + 'px');
+  if (S && !inScroll(n) && (B.x < S.x - 0.5 || B.y < S.y - 0.5 || B.x + B.width > S.x + S.width + 0.5 || B.y + B.height > S.y + S.height + 0.5)) flag('overlay-outside-screen', 'error', 'an overlay opens outside the screen frame (use the other side, or leave room)', n, 'by ' + Math.round(Math.max(S.y - B.y, B.y + B.height - S.y - S.height, S.x - B.x, B.x + B.width - S.x - S.width)) + 'px');
   const hov = x => 'reactions' in x && x.reactions.some(r => r.trigger && r.trigger.type === 'ON_HOVER');
-  if (n.findOne && n.findOne(hov)) for (let p = n.parent; p && p.type !== 'PAGE'; p = p.parent) if (hov(p)) { flag('hover-in-hover', 'error', 'an overlay whose items react to hover sits inside a layer that also reacts to hover: the items stay in hover after the pointer leaves', n, 'inside the hover of ' + p.name); break; }
+  if (n.findOne && n.findOne(hov)) for (let p = n.parent; p && p.type !== 'PAGE'; p = p.parent) if (hov(p)) { flag('hover-in-hover', p.type === 'INSTANCE' ? 'warn' : 'error', 'an overlay whose items react to hover sits inside a layer that also reacts to hover: the items stay in hover after the pointer leaves', n, 'inside the hover of ' + p.name); break; }
   let c = n;
   for (let p = n.parent; p && p.type !== 'PAGE'; c = p, p = p.parent) {
     const A = p.absoluteBoundingBox;
@@ -216,11 +255,15 @@ for (const { n, own, ancVis } of all) {
   }
 }
 
+const hiddenOverlays = all.filter(({ n, ancVis }) => n.visible === false && ancVis && n.boundVariables && n.boundVariables.visible && ['INSTANCE', 'FRAME'].includes(n.type) && !inFlow(n));
+for (const { n } of hiddenOverlays) flag('overlay-size-unverified', 'info', 'a hidden overlay is measured at the size it had when it was last shown; after its content changed it can be taller: show it open and measure it (recipes/interactive-overlays.md, Show the open state on the canvas)', n);
+
+// @end
+// @part prototype
 // Prototype wiring
 const setTrue = new Map(), setFalse = new Map(), toggled = new Set(), setAny = new Set();
 const reads = new Set();
 const clickSets = new Map();
-const toTry = [];
 const readIds = v => { if (!v) return; if (Array.isArray(v)) v.forEach(readIds); else if (v.id) reads.add(v.id); };
 for (const { n, own, inside, ancVis } of all) {
   if (n.boundVariables) for (const k of Object.keys(n.boundVariables)) readIds(n.boundVariables[k]);
@@ -268,7 +311,7 @@ for (const { n, own, inside, ancVis } of all) {
 }
 for (const [id, n] of setTrue) { if (!setFalse.has(id) && !toggled.has(id)) { const v = await getV(id); flag('never-closes', 'error', 'a variable is set to true and never to false', n, v ? v.name : id); } }
 for (const [id, n] of setFalse) { if (!setTrue.has(id) && !toggled.has(id)) { const v = await getV(id); flag('never-opens', 'warn', 'a variable is set to false and never to true', n, v ? v.name : id); } }
-for (const id of setAny) { if (!reads.has(id)) { const v = await getV(id); if (v) flag('variable-not-read', 'warn', 'a variable is set by a reaction and nothing is bound to it', null, v.name); } }
+for (const id of setAny) { if (!reads.has(id)) { const v = await getV(id); if (v && /(^|\/)(internal|item\/\d+)\//.test(v.name)) continue; if (v) flag('variable-not-read', 'warn', 'a variable is set by a reaction and nothing is bound to it', null, v.name); } }
 const owners = new Map();
 for (const { n } of all) {
   if (n.type !== 'INSTANCE' || !n.componentProperties || !OVERLAY_SETS.has(await setNameOf(n))) continue;
@@ -288,8 +331,10 @@ for (const { n } of all) {
   try { if (v && v.resolvedType === 'BOOLEAN' && n.visible === true && v.resolveForConsumer(n).value === true && /open|show|visible/.test(v.name)) flag('open-at-start', 'info', 'an overlay variable is true: the overlay is open when the prototype starts', n, v.name); } catch (e) {}
 }
 
+// @end
+// @part static
 // A frame shows the default mode of DS / Core Colors (Dark) unless it or one of its parents sets a mode.
-let theme = null, colorsId = null, colorsModes = null;
+let colorsId = null, colorsModes = null;
 const local = (await figma.variables.getLocalVariableCollectionsAsync()).find(c => c.name === 'DS / Core Colors');
 if (local) { colorsId = local.id; colorsModes = Object.fromEntries(local.modes.map(m => [m.modeId, m.name])); }
 else for (const id of colorVarIds) {
@@ -304,6 +349,7 @@ if (colorsId && counts.instances) {
   else theme = 'mode set: ' + screens.slice(0, MAX).map(s => s.name + ' ' + (colorsModes[modeOf(s)] || modeOf(s))).join(', ');
 } else if (counts.instances) theme = 'not checked: the DS / Core Colors collection was not found (no layer of this frame is bound to it)';
 
+// @end
 const out = { errors: {}, warnings: {}, info: {} };
 for (const [id, c] of Object.entries(R)) out[c.sev === 'error' ? 'errors' : c.sev === 'warn' ? 'warnings' : 'info'][id] = { count: c.count, what: c.what, examples: c.examples };
 return { root: { id: root.id, name: root.name }, ms: Date.now() - started, counts, theme, ...out, toTryInPresent: toTry };

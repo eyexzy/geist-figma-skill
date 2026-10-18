@@ -20,7 +20,7 @@ const HELP = `Geist Figma library lookup
   find <words>            components for a need ("date picker", "snackbar")
   choose <words>          which component of several similar ones ("modal vs drawer")
   component <slug>        sets, default variant, properties with defaults and values, nesting
-  brief <slug>            what a component is for and how to set it up: public sets with properties, Best Practices, Assembly
+  brief <slug>            what a component is for and how to set it up: public sets with properties, Best Practices, Assembly, and what its layers do in the file (text case, bindings, text styles, slots, nested parts)
   guide <slug> [section]  written guidelines of a component (no section: list sections)
   layout <slug>           exact layout, sizes and bindings of a component, read from the Figma file
   motion <slug>           reactions of a component: trigger, transition, time, curve
@@ -33,7 +33,7 @@ const HELP = `Geist Figma library lookup
   icon <words>            icon names and meanings ("delete", "settings")
   rule [name] [section]   the rules for when to use what; no name: list them
   check "<Set>: k=v ..."  validate a plan before building: set, part ("Input > Label: value=Name"), properties and values
-  audit <node id>         scripts/figma/audit.js with ROOT_ID set, ready to paste into use_figma (a frame, a section or an instance)
+  audit <node id> [parts] scripts/figma/audit.js with ROOT_ID set, ready to paste into use_figma (a frame, a section or an instance); parts static, overlays, prototype print one part with the shared prelude
   helpers [names] [--comments] functions of scripts/figma/helpers.js to paste into use_figma, with dependencies, without comment lines; --comments keeps them
   keys <refs>             what to search for and the GEIST_KEYS to fill in a file that uses the published library (set:Button icon:Trash style:Copy/14)
   keys from <file> [refs] GEIST_KEYS built from a saved search_design_system result
@@ -41,6 +41,8 @@ const HELP = `Geist Figma library lookup
   list                    all components by category`;
 
 const components = () => loadJson('components.json').components;
+// Code printed for use_figma: no comment lines and no indentation.
+const compact = code => code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//')).map(l => l.replace(/^\s+/, '')).join('\n');
 
 function findComponent(name) {
   const n = name.toLowerCase().trim();
@@ -305,6 +307,19 @@ function helperBlocks() {
   return { blocks, shared };
 }
 
+// The audit with ROOT_ID set. want is a set of parts (static, overlays, prototype) or null for all; the shared prelude is always kept.
+function auditCode(id, want) {
+  let skip = false;
+  const kept = [];
+  for (const l of readFile('scripts/figma/audit.js').split('\n')) {
+    const m = l.match(/^\/\/ @part (\w+)$/);
+    if (m) { skip = !!want && !want.has(m[1]); continue; }
+    if (l === '// @end') { skip = false; continue; }
+    if (!skip) kept.push(l);
+  }
+  return kept.join('\n').replace("const ROOT_ID = '0:0';", `const ROOT_ID = '${id}';`);
+}
+
 function showHelpers(args) {
   const keep = args.includes('--comments');
   const names = args.filter(a => a !== '--comments');
@@ -325,7 +340,7 @@ function showHelpers(args) {
   };
   (names.includes('all') ? blocks.map(b => b.name) : names).forEach(add);
   const code = shared + '\n\n' + blocks.filter(b => want.has(b.name)).map(b => b.text).join('\n\n');
-  out(keep ? code : code.split('\n').filter(l => l.trim() && !l.trim().startsWith('//')).join('\n'));
+  out(keep ? code : compact(code));
 }
 
 function sectionBlock(slug, title) {
@@ -337,6 +352,37 @@ function sectionBlock(slug, title) {
   let end = s.end;
   if (s.level === 2) { const next = list.find(x => x.start > s.start && x.level === 2); end = next ? next.start : lines.length; }
   return lines.slice(s.start, end);
+}
+
+// What the layers of a set do, read from the file: text case, bindings to properties, text styles, slots, nested parts (data/features.json).
+const featuresOf = c => loadJson('features.json')[c.page.name.replace(/^↳ /, '')] || {};
+const CASE = { TITLE: 'Title Case', UPPER: 'UPPERCASE', LOWER: 'lowercase' };
+const BIND = { visible: 'visibility', characters: 'text', mainComponent: 'instance swap', slotContentId: 'slot' };
+const share = f => { const [k, n] = f.split('/'); return k === n ? '' : ` in ${k} of ${n} variants`; };
+const splitPaths = s => s.replace(/ \+\d+ more$/, '').split(', ');
+function featureLines(fe, c) {
+  const names = [...c.sets.filter(s => !s.helper), ...c.sets.filter(s => s.helper)].map(s => s.name).filter(n => fe[n]);
+  const lines = [];
+  for (const name of names) {
+    const f = fe[name];
+    lines.push(`${name}:`);
+    for (const [p, cs, k] of f.case || []) lines.push(`- ${p} shows its text in ${CASE[cs] || cs}${share(k)}`);
+    if (f.bound) lines.push(`- Properties and the layers they drive: ${f.bound.map(([p, kind, prop]) => `${prop} (${p}${kind === 'visible' ? '' : ', ' + BIND[kind]})`).join('; ')}`);
+    for (const [p, kind, props, k] of f.partial || []) lines.push(`- ${p}: ${BIND[kind]} is bound to ${props} only${share(k)}`);
+    for (const [p, font, k] of f.noStyle || []) lines.push(`- ${p} has no text style (${font})${share(k)}`);
+    for (const [p, items] of f.slots || []) lines.push(`- Slot ${p} holds by default: ${items.length ? items.slice(0, 4).map(([n, t, d]) => t === 'TEXT' ? `${n} (text, ${d})` : t === 'INSTANCE' ? `${n} (${d})` : `${n} (${t.toLowerCase()})`).join(', ') + (items.length > 4 ? ` and ${items.length - 4} more` : '') : 'nothing'}`);
+    for (const [p, set, props] of f.nested || []) lines.push(`- ${p}: ${set} starts as ${props}; its own default is different`);
+  }
+  return lines;
+}
+
+// The values a nested part starts with inside its parent, when they differ from the defaults of the part's own set.
+function inheritedProps(parent, part) {
+  const c = components().find(x => x.sets.some(s => s.name === parent.name));
+  if (!c) return null;
+  const rows = (featuresOf(c)[parent.name] || {}).nested || [];
+  const row = rows.find(([p, set]) => set === part.set && splitPaths(p).some(x => x.split('/').pop().replace(/#\d+$/, '').toLowerCase() === part.name.toLowerCase()));
+  return row ? Object.fromEntries(row[2].split(' ').map(kv => kv.split('='))) : null;
 }
 
 function showBrief(c) {
@@ -355,6 +401,8 @@ function showBrief(c) {
   const bp = sectionBlock(c.slug, 'Best Practices').filter(l => { if (/^### /.test(l)) skip = l === '### Accessibility'; return !skip; });
   if (bp.length) out('\n' + bp.join('\n').trim());
   for (const t of ['States', 'Assembly']) { const b = sectionBlock(c.slug, t); if (b.length) out('\n' + b.join('\n').trim()); }
+  const fl = featureLines(featuresOf(c), c);
+  if (fl.length) out('\nBehavior in this file (read from the library file):\n' + fl.join('\n'));
   out(`\nMore: guide ${c.slug} Accessibility | guide ${c.slug} Layout | example ${c.slug} | motion ${c.slug}`);
 }
 
@@ -372,11 +420,13 @@ function checkSpec(spec, iconNames) {
     return { errs: [`no set "${m[1]}"` + (r.length ? `; close: ${r.join('; ')}` : '')], notes };
   }
   if (set.helper && !m[2]) notes.push(`"${set.name}" is a helper set; place the public set that contains it (${set.usedIn.join(', ')})`);
-  let label = set.name;
+  let label = set.name, inherited = null;
   if (m[2]) {
     const part = (set.exposed || []).find(e => e.name.toLowerCase() === m[2].trim().toLowerCase());
     if (!part) return { errs: [`"${set.name}" exposes no part "${m[2]}". Exposed: ${(set.exposed || []).map(e => e.name).join(', ') || 'none'}`], notes };
     label = `${set.name} > ${part.name}`;
+    inherited = inheritedProps(set, part);
+    if (inherited) notes.push(`${label}: inside ${set.name} the part starts with ${Object.entries(inherited).map(([k, v]) => k + '=' + v).join(' ')}; properties you do not list keep these values`);
     set = byName(part.set);
   }
   for (const [, k, , quoted, bare] of m[3].matchAll(/([A-Za-z0-9]+)=("([^"]*)"|(\S+))/g)) {
@@ -394,6 +444,25 @@ function checkSpec(spec, iconNames) {
     if (want.length > 1 && !rows.some(r => want.every(([k, v]) => r[k] === v))) {
       const hints = want.map(([k]) => { const others = want.filter(([x]) => x !== k); const ok = [...new Set(rows.filter(r => others.every(([x, v]) => r[x] === v)).map(r => r[k]))]; return ok.length ? `${k} is ${ok.join(' | ')} with ${others.map(([x, v]) => x + '=' + v).join(' ')}` : null; }).filter(Boolean);
       errs.push(`${label}: no variant has ${want.map(([k, v]) => k + '=' + v).join(' ')} together (${set.combos.length} of ${gridSize(set)} combinations exist)` + (hints.length ? '. ' + hints.join('; ') : ''));
+    }
+  }
+  if (set.combos && !errs.length && inherited) {
+    const variantProps = new Set(set.props.filter(p => p.type === 'VARIANT').map(p => p.name));
+    const listed = [...m[3].matchAll(/([A-Za-z0-9]+)=(?:"([^"]*)"|(\S+))/g)].map(x => [x[1], x[2] ?? x[3]]).filter(([k]) => variantProps.has(k));
+    const kept = Object.entries(inherited).filter(([k]) => variantProps.has(k) && !listed.some(([x]) => x === k));
+    const rows = set.combos.map(n => Object.fromEntries(n.split(', ').map(kv => kv.split('='))));
+    if (listed.length && kept.length && !rows.some(r => [...listed, ...kept].every(([k, v]) => r[k] === v))) {
+      const withListed = rows.filter(r => listed.every(([x, v]) => r[x] === v));
+      const clash = kept.filter(([k, v]) => !withListed.some(r => r[k] === v));
+      const hints = clash.map(([k]) => `${k} is ${[...new Set(withListed.map(r => r[k]))].join(' | ')} with ${listed.map(([x, v]) => x + '=' + v).join(' ')}`);
+      errs.push(`${label}: ${listed.map(([k, v]) => k + '=' + v).join(' ')} does not exist together with ${(clash.length ? clash : kept).map(([k, v]) => k + '=' + v).join(' ')}, the value the part keeps inside ${m[1].trim()}` + (hints.length ? '. ' + hints.join('; ') : ''));
+    }
+  }
+  if (set.combos && !errs.length && m[2]) {
+    const want = [...m[3].matchAll(/([A-Za-z0-9]+)=(?:"([^"]*)"|(\S+))/g)].map(x => [x[1], x[2] ?? x[3]]).filter(([k]) => set.props.some(p => p.name === k && p.type === 'VARIANT'));
+    if (want.length) {
+      const rows = set.combos.filter(n => want.every(([k, v]) => n.split(', ').includes(k + '=' + v)));
+      notes.push(`${label}: not every combination of its variant properties exists, and the properties you do not list keep the values of the nested instance. Variants with ${want.map(([k, v]) => k + '=' + v).join(' ')}: ${rows.slice(0, 8).join(' | ') || 'none'}`);
     }
   }
   return { errs, notes, label };
@@ -434,8 +503,11 @@ switch (cmd) {
     break;
   }
   case 'audit': {
-    if (!/^\d+:\d+$/.test(q)) { out('Usage: audit <node id>, for example audit 123:456'); break; }
-    out(readFile('scripts/figma/audit.js').replace("const ROOT_ID = '0:0';", `const ROOT_ID = '${q}';`));
+    const [id, ...parts] = rest;
+    if (!/^\d+:\d+$/.test(id || '')) { out('Usage: audit <node id> [static] [overlays] [prototype], for example audit 123:456. Without parts it prints the whole audit; a part prints the shared prelude and that part only.'); break; }
+    const bad = parts.filter(p => !['static', 'overlays', 'prototype'].includes(p));
+    if (bad.length) fail(`Unknown part "${bad[0]}". Parts: static, overlays, prototype`);
+    out(compact(auditCode(id, parts.length ? new Set(parts) : null)));
     break;
   }
   case 'check': {
@@ -558,10 +630,12 @@ switch (cmd) {
     }
     const { result, missing } = resolveKeys(parseRefs(q, rest));
     if (missing.length) out('Not found: ' + missing.join(', ') + '. Names are exact: component sets (see component <slug>), icons (icon <word>), styles (style <words>).');
-    const queries = [...Object.keys(result.sets).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.icons).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.styles).map(n => ({ entity: 'style', query: n }))];
+    const seen = new Set();
+    const queries = [...Object.keys(result.sets).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.icons).map(n => ({ entity: 'component', query: n })), ...Object.keys(result.styles).map(n => ({ entity: 'style', query: n }))].filter(x => { const k = x.entity + '|' + x.query; if (seen.has(k)) return false; seen.add(k); return true; });
+    const batches = []; for (let i = 0; i < queries.length; i += 20) batches.push(queries.slice(i, i + 20));
     out('In the library file, or in a copy of it, paste this as it is: sets, icons and styles are found by name.');
     out('const GEIST_KEYS = ' + JSON.stringify(result) + ';');
-    out('\nIn a file that uses the published library the import keys come from search_design_system, because the original library file and its Community copy have other keys. Call it with the fileKey of that file and\nqueries = ' + JSON.stringify(queries) + '\nTake the entry whose name is exactly the query and whose libraryName starts with "Geist Design System" (a query also returns neighbors such as "Copy Button" and components of other libraries). Fill the empty strings: componentSetKey of a set into key, componentKey of an icon, key of a style. The first answer carries libraryKey; pass it as includeLibraryKeys in later searches to leave the other libraries out. A large answer can be saved as JSON and turned into the line above: keys from <file> [refs].');
+    out('\nIn a file that uses the published library the import keys come from search_design_system, because the original library file and its Community copy have other keys. Call it with the fileKey of that file, at most 20 queries per call' + (batches.length > 1 ? ' (' + batches.length + ' calls):' : ':') + '\n' + batches.map((b, i) => (batches.length > 1 ? 'call ' + (i + 1) + ': ' : '') + 'queries = ' + JSON.stringify(b)).join('\n') + '\nTake the entry whose name is exactly the query and whose libraryName starts with "Geist Design System" (a query also returns neighbors such as "Copy Button" and components of other libraries). Fill the empty strings: componentSetKey of a set into key, componentKey of an icon, key of a style. When a name is both a set and an icon (Gauge), one query returns both: the entry with assetType component_set is the set and the entry with assetType component is the icon. The first answer carries libraryKey; pass it as includeLibraryKeys in later searches to leave the other libraries out. A large answer can be saved as JSON and turned into the line above: keys from <file> [refs].');
     break;
   }
   case 'fresh': {

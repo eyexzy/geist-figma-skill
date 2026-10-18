@@ -30,7 +30,7 @@ Contents: Best Practices, Figma Guidelines, Anatomy, Badge properties, Pill prop
 - `variant` — the colors `gray`, `blue`, `purple`, `amber`, `red`, `pink`, `green`, and `teal`, plus `trial`, `turbo`, and `inverted`.
 - `size` — `sm`, `md`, or `lg`. Height, text, gap, padding, and icon scale with it.
 - `contrast` — `high` or `low`. `low` is the `-subtle` suffix from the Geist docs. `trial`, `turbo`, and `inverted` exist at `high` only.
-- `label` — renders in Title Case on one line.
+- `label` — renders in Title Case on one line. Every word starts with a capital: `v14` shows as `V14`, `+0.38 s` as `+0.38 S`.
 - `showIcon` — shows or hides the leading icon. `icon` swaps the glyph.
 
 ### Pill properties

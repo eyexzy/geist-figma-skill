@@ -79,8 +79,8 @@ Contents: Best Practices, When to use, Behavior, Content, Accessibility, Figma G
 - Show typed text by setting `type` to `value` on the exposed `Text` and writing `text`. The field starts as a `placeholder`.
 - In `disabled` keep `Text` on `disabled`; it carries the disabled color.
 - Set `state` to `error` and write the message in `message` on the exposed `Error`.
-- Build the look of `<SearchInput>` from a search icon in `Prefix` with `prefixStyling` `false`. Add `kbd` in `Suffix` for the shortcut hint.
-- Build the look of `<ClearableInput>` from `kbd` in `Suffix`: turn off `showKbd2` and `showKbd3` on `Keybind`, then turn off `meta` and write `Esc` in `label` on `Kbd 1`.
+- Build the look of `<SearchInput>` from a search icon in `Prefix` with `prefixStyling` `false`. Set `suffixStyling` to `false` on `Suffix`, then `type` to `kbd` for the shortcut hint.
+- Build the look of `<ClearableInput>` from `kbd` in `Suffix`: turn off `showKbd2` and `showKbd3` on `Keybind`, then turn off `meta`, turn on `showLabel` and write `Esc` in `label` on `Kbd 1`.
 - Set the instance to `Fill container` to follow its parent.
 
 ### Layout

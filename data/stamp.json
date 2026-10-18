@@ -1,5 +1,5 @@
 {
- "takenOn": "2026-10-18",
+ "takenOn": "2026-10-19",
  "counts": {
   "variables": 599,
   "collections": 19,
@@ -10,20 +10,20 @@
   "pages": 65,
   "componentPages": 61,
   "componentSets": 124,
-  "variants": 1962,
+  "variants": 1986,
   "icons": 486
  },
  "hash": {
   "variables": "55907bb5",
   "styles": "2faa77bb",
   "pages": "61edffc9",
-  "sets": "62a9cd31",
-  "docs": "91ec9d05",
-  "iconNames": "679ec1b2"
+  "sets": "66007770",
+  "iconNames": "679ec1b2",
+  "docs": "149264c3"
  },
  "docsByPage": {
   "Avatar": "8cabcd17",
-  "Badge": "03443ad9",
+  "Badge": "08e3a82a",
   "Banner": "c3566c86",
   "Book": "bebcbd48",
   "Breadcrumbs": "7c42fbd3",
@@ -49,7 +49,7 @@
   "Fieldset": "0cd3b033",
   "File Tree": "eaef373e",
   "Gauge": "20f8f53e",
-  "Input": "5cf0c9cc",
+  "Input": "2be77a42",
   "Keyboard Input": "ac2a2968",
   "Label": "0f15ca17",
   "Load More Button": "11393b65",
@@ -74,12 +74,12 @@
   "Split Button": "30d8596f",
   "Status Dot": "306c3c67",
   "Switch": "3091d202",
-  "Table": "aa4f2e97",
+  "Table": "14af59d5",
   "Tabs": "cc29e03f",
   "Textarea": "ed53f834",
   "Theme Switcher": "3203b9fa",
   "Toast": "0e53399e",
-  "Toggle": "e0208003",
+  "Toggle": "50a9258d",
   "Tooltip": "828a4218",
   "Video": "8ba5fd93"
  },

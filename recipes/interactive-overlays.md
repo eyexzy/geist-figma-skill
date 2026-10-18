@@ -8,6 +8,7 @@ Read the component card for the details of one component (`node scripts/lookup.m
 - One overlay: Modal, Destructive Action Modal, Drawer, Sheet, Command Menu, Menu
 - Which component, which variable, where it goes
 - Built-in menus used several times: Dots Menu in table rows
+- A prototype with its own values: Multi Select
 - Absolute overlays: tooltip, context card, relative time card
 - Canvas stacking for menus that open downward
 - A menu inside a Table cell
@@ -74,7 +75,7 @@ A Destructive Action Modal is a Modal with a phrase field, and its Submit stays 
 | Calendar | built in | `state/calendar/open`, `state/presets/open` | one calendar per prototype screen |
 | Feedback | built in | `state/feedback/open` | `side=top` near the bottom edge of the screen |
 
-"Built in" means the component is wired to its variable inside, trigger included, so one instance on a screen works without any setup. A library variable cannot be edited in a file that uses the library: a value such as `selection/row-count` of Multi Select stays at its default there. For another value create your own variables and point the reactions at them: `geistRewireReactions` moves the wiring of one variable. Add only what its guidelines ask for, such as a click that sets the variable to `false` on each `_Menu Item` you drop into a Dots Menu or a Split Button. `state/menu/open` exists in three collections, so pass the collection: `geistOnClickSet(item, 'state/menu/open', false, 'Prototyping / Dots Menu')`. Find a variable name with `node scripts/lookup.mjs token <words>`.
+"Built in" means the component is wired to its variable inside, trigger included, so one instance on a screen works without any setup. A library variable cannot be edited in a file that uses the library: a value such as `selection/row-count` of Multi Select stays at its default there. For another value create your own variables and point the reactions at them: `geistRewireReactions` moves the wiring of one variable, `geistCloneVariables` copies a whole `Prototyping / <Component>` collection. Add only what its guidelines ask for, such as a click that sets the variable to `false` on each `_Menu Item` you drop into a Dots Menu or a Split Button. `state/menu/open` exists in three collections, so pass the collection: `geistOnClickSet(item, 'state/menu/open', false, 'Prototyping / Dots Menu')`. Find a variable name with `node scripts/lookup.mjs token <words>`.
 
 In a file that uses the published library, the variables of the `Prototyping / <Component>` collections are library variables and `geistVar` imports them by name. If binding or setting a library variable is refused in your file, use your own boolean and rewire to it.
 
@@ -92,6 +93,17 @@ await geistRewireReactions(dotsMenu, 'state/menu/open', 'orders/row-1/menu/open'
 ```
 
 The Trigger of a Dots Menu flips the variable (the NOT of itself); `geistRewireReactions` keeps that expression and points it at the new variable. Add `geistOnClickSet(menuItem, 'orders/row-1/menu/open', false, 'Prototyping / Orders')` to each `_Menu Item` so a pick closes the list. Repeat per row.
+
+## A prototype with its own values: Multi Select
+
+The Multi Select prototype keeps its state in the `Prototyping / Multi Select` collection: `item/N/selected` per row, `selection/checked-count`, `selection/row-count`, `trigger/label` and two internal scratch values. Its reactions are conditional blocks that read and write these variables, and the checkbox of each row (`checked`), the trigger label and the open state are bound to them. A library variable cannot be edited in a file that uses the library, so `selection/row-count` stays at 3 there. `geistCloneVariables` copies the collection into one of yours and points the reactions, the bound layers and the bound properties under a node at the copies. `values` sets start values by name and `texts` replaces string values in the reactions.
+
+```js
+// helpers and keys pasted above; multi is the placed Multi Select instance
+const copy = await geistCloneVariables('Prototyping / Multi Select', 'Prototyping / Regions', multi, { 'selection/row-count': 4 }, { 'All items selected': 'All regions selected' });
+```
+
+A row you add by duplicating a row keeps the wiring of its source. The two row variables trade places in the copy, so the new row reads and writes its own: `geistRewireReactions(newRow, ['item/3/selected', 'item/4/selected'], ['item/4/selected', 'item/3/selected'], 'Prototyping / Regions', 'Prototyping / Regions')`, then `geistBindProp(newItem, 'checked', 'item/4/selected', 'Prototyping / Regions')`. Read the helper's return value and the reactions back from the file: the copy is checked by counting the references to each variable, and only a run in Present shows the clicks.
 
 ## Absolute overlays: tooltip, context card, relative time card
 

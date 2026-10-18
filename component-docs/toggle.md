@@ -30,7 +30,8 @@ Contents: Best Practices, Figma Guidelines, Anatomy, Toggle properties, Prototyp
 - `checked` — moves the thumb 14px in `small` and 16px in `medium` and `large`, and fills the track `legacy/success`.
 - `disabled` — a flat thumb on a muted track, with shadow and border removed; clicks are ignored.
 - `direction` — `label-first` or `switch-first`, the `flex-row-reverse` of code.
-- `label` and `showLabel` — the `children` of code. `Label` applies Title Case, the `capitalize` of the default `labelCasing="title"`.
+- `label` and `showLabel` — the `children` of code.
+- `labelCasing` — `title` or `normal`, as in code. `title` is the `capitalize` of code: every word starts with a capital, so `Only errors` shows as `Only Errors`. `normal` keeps the text as written.
 
 ### Prototyping
 
@@ -58,6 +59,6 @@ Contents: Best Practices, Figma Guidelines, Anatomy, Toggle properties, Prototyp
 
 ### Props in code
 
-- `color`, `icon` and `labelCasing="normal"` live only in code.
+- `color` and `icon` live only in code.
 - The track color eases out from the first frame, so it starts faster than the Figma track.
 - `size` defaults to `small`; `noMargin` sets `m-0` on the track.

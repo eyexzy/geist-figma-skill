@@ -80,7 +80,7 @@ An instance inherits everything from its component. What you change becomes an o
 
 Ask: am I changing a property or a part, and did the value I set arrive?
 
-Check: `restyled-instance`, `default-copy`, `detached`, `lookalike` and `layer-opacity`.
+Check: `restyled-instance`, `inner-layout-override`, `default-copy`, `detached`, `lookalike` and `layer-opacity`; the hints `bare-action-icon`, `select-like`, `progress-like` and `text-suggests-component` name a library component that a layer may stand in for.
 
 ## Reading back and looking
 
